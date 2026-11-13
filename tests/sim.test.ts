@@ -1,0 +1,60 @@
+import { describe, expect, it } from 'vitest';
+import { loadContent, NPC_IDS } from '../src/content';
+import { createGame } from '../src/engine/creation';
+import { activitiesAt, choose, combatAct, doAction, locationOpen, methodsOf, npcsAt, proceed, sceneView, talkTo, advance, beginGame } from '../src/engine/game';
+import { availableMoves } from '../src/engine/combat';
+import { R } from '../src/engine/registry';
+import { makeRng } from '../src/engine/rng';
+import type { GameState } from '../src/engine/types';
+
+loadContent();
+
+function step(s: GameState, r: () => number) {
+  if (s.combat) {
+    const mv = availableMoves(s).filter((m) => m.id !== 'flee' || s.cond.hp < 30);
+    combatAct(s, mv[Math.floor(r() * mv.length)].id);
+    return;
+  }
+  if (s.scene) {
+    const v = sceneView(s)!;
+    if (v.choices.length) choose(s, v.choices[Math.floor(r() * v.choices.length)].index);
+    else proceed(s);
+    return;
+  }
+  const locs = [...R.locations.keys()].filter((l) => locationOpen(s, l));
+  const loc = locs[Math.floor(r() * locs.length)];
+  const people = npcsAt(s, loc);
+  if (people.length && r() < 0.3) {
+    talkTo(s, people[0].id);
+    return;
+  }
+  const acts = activitiesAt(s, loc).flatMap((a) => methodsOf(s, a).map((m) => ({ a, m })));
+  if (!acts.length) {
+    advance(s, 1);
+    return;
+  }
+  const { a, m } = acts[Math.floor(r() * acts.length)];
+  const focus = m.focuses?.length ? m.focuses[0].id : undefined;
+  doAction(s, a.id, m.id, { focus });
+}
+
+describe('simulation', () => {
+  for (const seed of [1, 2, 3, 42, 777]) {
+    it(`runs 45 days without errors (seed ${seed})`, () => {
+      const s = createGame({ name: 'テスト', gender: 'x', pronoun: '私', mode: 'standard', seed }, NPC_IDS);
+      beginGame(s);
+      const r = makeRng(seed * 13);
+      let steps = 0;
+      while (s.day <= 45 && !s.dead && steps < 20000) {
+        step(s, r);
+        steps++;
+      }
+      expect(steps).toBeLessThan(20000);
+      const show = (k: keyof GameState['stats']) => s.stats[k].toFixed(1);
+      console.log(
+        `seed ${seed}: day ${s.day} dead=${!!s.dead} rank=${s.rank} money=${s.money} sword_p=${show('sword_p')} str=${show('str')} end=${show('end')} magic_p=${show('magic_p')} quests=${s.counters.questDone ?? 0} seen=${Object.keys(s.seen).length}`,
+      );
+      for (const k of Object.keys(s.stats)) expect(Number.isFinite(s.stats[k as keyof typeof s.stats])).toBe(true);
+    });
+  }
+});
