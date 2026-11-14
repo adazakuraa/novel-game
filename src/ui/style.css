@@ -592,3 +592,25 @@ input {
   font-size: 0.8rem;
   color: var(--tell);
 }
+
+.title-status {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.7;
+  margin-top: -24px;
+}
+.title-status p {
+  margin: 0;
+}
+.title-status .done {
+  color: var(--read);
+}
+.title-status .wip {
+  color: var(--accent);
+}
+.title-status .ver {
+  font-size: 0.7rem;
+  opacity: 0.8;
+  margin-top: 4px;
+}

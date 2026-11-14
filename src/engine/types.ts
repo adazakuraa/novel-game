@@ -100,6 +100,23 @@ export interface QuestState {
   data: Record<string, number | string | boolean>;
 }
 
+export interface AffState {
+  joined: number; // 加入した日
+  standing: number; // 組織内での評価
+  duty: number; // 今週こなした義務（時間帯の数）
+  missed: number; // 義務を果たせなかった週の数（連続）
+}
+
+export interface ExploreState {
+  dungeon: string;
+  node: string;
+  torch: number; // 松明の残り（移動ごとに減る）
+  visited: string[];
+  searched: string[];
+  moves: number;
+  companion?: string;
+}
+
 export interface GameState {
   version: 1;
   id: string;
@@ -134,6 +151,8 @@ export interface GameState {
   scene: SceneState | null;
   combat: CombatState | null;
   quest: QuestState | null;
+  affil?: Record<string, AffState>; // 所属（後から追加された項目のため省略可）
+  explore?: ExploreState | null;
   lastAction?: string;
   dead?: boolean;
   ended?: boolean;

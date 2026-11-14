@@ -45,6 +45,11 @@ export const ACTION_WORDS: Record<string, string[]> = {
   'quest:report': ['報告'],
   'cores:sell': ['魔核を売'],
   'ranktest:apply': ['昇級', '審査', '試験'],
+  'aqueduct:enter': ['地下', '水道', '潜', '探索', 'ダンジョン'],
+  'aff_institute:duty_institute': ['研究補助', '分室の務め', '助手の仕事'],
+  'aff_berg:duty_berg': ['商会の務め', '護衛', '検品'],
+  'aff_garrison:duty_garrison': ['夜警', '守備隊の務め', '巡回'],
+  'shop:buy:torch': ['松明', 'たいまつ'],
   'inn_help:dishes': ['手伝', '皿洗い', '宿の仕事', '女将の手伝い'],
 };
 
@@ -63,6 +68,7 @@ export const LOCATION_WORDS: Record<string, string[]> = {
   market: ['市場', '店', '露店', '商会'],
   institute: ['分室', '魔導院', '研究室', '書庫'],
   gate: ['東門', '門', '城壁', '森'],
+  undercity: ['旧水道', '井戸', '地下'],
 };
 
 /** 人物を指しうる言葉 */
@@ -73,6 +79,7 @@ export const NPC_WORDS: Record<string, string[]> = {
   noin: ['ノイン', '森人', '研究者'],
   marta: ['マルタ', '女将', 'おかみ'],
   edgar: ['エドガー', '商会の次男'],
+  aurelia: ['アウレリア', '調査官'],
 };
 
 export const TALK_WORDS = ['話', '会いに', '会う', '相談', '聞く', '訪ね', 'しゃべ', '雑談'];

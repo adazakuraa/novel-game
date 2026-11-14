@@ -70,6 +70,7 @@ export const ITEMS: ItemDef[] = [
       },
     },
   },
+  { id: 'torch', name: '松明', desc: '地下を照らす松明。一本で、およそ八歩ぶんもつ。', price: 4 },
   { id: 'oldsword', name: '古い長剣', desc: '中古屋で買った剣。刃こぼれはあるが、まだ使える。' },
   { id: 'ironsword', name: '鍛鉄の剣', desc: '東市場の鍛冶屋が打った新品の剣。重心がいい。', price: 380 },
   { id: 'book_sword', name: '『剣理初歩』', desc: '王都の剣術道場が出している教本。図が多い。', price: 60 },

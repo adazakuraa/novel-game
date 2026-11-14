@@ -23,6 +23,8 @@ import { band } from '../engine/stats';
 import { exportJson, loadSlot, saveSlot } from '../engine/save';
 import { SELF } from '../content/selftext';
 import { searchActions, type SearchHit } from '../engine/search';
+import { act as actHere, currentNode, exitDungeon, linkOpen, move, nodeLines, search as searchHere, torchWords } from '../engine/explore';
+import { affiliationList } from '../engine/affil';
 
 type Tab = 'act' | 'journal' | 'people' | 'items' | 'system';
 
@@ -56,7 +58,7 @@ function condWords(s: GameState): string[] {
 export function Game(p: Props) {
   const [tab, setTab] = useState<Tab>('act');
   const s = p.state;
-  const busy = !!s.scene || !!s.combat;
+  const busy = !!s.scene || !!s.combat || !!s.explore;
 
   useEffect(() => {
     if (busy) setTab('act');
@@ -84,6 +86,8 @@ export function Game(p: Props) {
             <Combat s={s} update={p.update} />
           ) : s.scene ? (
             <Scene s={s} update={p.update} />
+          ) : s.explore ? (
+            <Explore s={s} update={p.update} />
           ) : (
             <Planner s={s} update={p.update} />
           )
@@ -189,6 +193,60 @@ function Combat({ s, update }: { s: GameState; update: Props['update'] }) {
             {m.label}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ───────── 探索 ─────────
+
+function Explore({ s, update }: { s: GameState; update: Props['update'] }) {
+  const [msg, setMsg] = useState('');
+  const ex = s.explore!;
+  const nd = currentNode(s);
+  const d = R.dungeons.get(ex.dungeon)!;
+  return (
+    <div class="explore">
+      <div class="combat-head">
+        <span class="enemy-name">{nd.name}</span>
+        <span class="dist">{d.name}</span>
+      </div>
+      <Lines lines={nodeLines(s)} />
+      {msg && <p class="notice">{msg}</p>}
+      <p class="muted small">{torchWords(s)}</p>
+      <div class="moves">
+        {nd.links.map((l) => {
+          const ok = linkOpen(s, l);
+          return (
+            <button
+              class="choice"
+              disabled={!ok}
+              onClick={() => {
+                setMsg('');
+                update((st) => move(st, l.to));
+              }}
+            >
+              {l.label}
+              {!ex.visited.includes(l.to) && ok ? '（未踏）' : ''}
+              {!ok && l.blocked ? <span class="method-desc">　{l.blocked}</span> : null}
+            </button>
+          );
+        })}
+        {nd.action && (!nd.action.cond || nd.action.cond(s)) && (
+          <button class="choice" onClick={() => update((st) => actHere(st))}>
+            {nd.action.label}
+          </button>
+        )}
+        {!ex.searched.includes(ex.node) && (
+          <button class="choice" onClick={() => update((st) => setMsg(searchHere(st)))}>
+            辺りを調べる
+          </button>
+        )}
+        {nd.exit && (
+          <button class="choice flee" onClick={() => update((st) => exitDungeon(st))}>
+            地上へ戻る
+          </button>
+        )}
       </div>
     </div>
   );
@@ -421,9 +479,21 @@ function Journal({ s }: { s: GameState }) {
 
 function People({ s }: { s: GameState }) {
   const met = [...R.npcs.values()].filter((n) => s.npcs[n.id]?.met);
+  const affs = affiliationList(s);
   if (met.length === 0) return <p class="muted">まだ誰とも知り合っていない。</p>;
   return (
     <div class="people">
+      {affs.length > 0 && (
+        <div class="person-card">
+          <strong>所属</strong>
+          {affs.map(({ def, state }) => (
+            <p>
+              {def.name}：{def.dutyPerWeek > 0 ? `週に${def.dutyPerWeek}回の${def.dutyLabel}（今週${state.duty}回）` : '義務なし'}
+              {def.pay > 0 ? `、週給${def.pay}銅貨` : ''}
+            </p>
+          ))}
+        </div>
+      )}
       {met.map((n) => {
         const st = s.npcs[n.id];
         return (

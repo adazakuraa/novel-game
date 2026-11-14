@@ -408,7 +408,7 @@ const inn: ActivityDef[] = [
 
 // ───────── 市場 ─────────
 
-const SHOP = ['bread', 'salve', 'book_sword', 'book_beast', 'book_herb', 'ironsword'];
+const SHOP = ['bread', 'torch', 'salve', 'book_sword', 'book_beast', 'book_herb', 'ironsword'];
 
 const market: ActivityDef[] = [
   {
@@ -418,7 +418,7 @@ const market: ActivityDef[] = [
     methods: [],
     dynamic: (s) =>
       SHOP.map((id) => R.items.get(id)!)
-        .filter((it) => !(it.id.startsWith('book_') && s.items[it.id]) && !(it.id === 'ironsword' && s.items.ironsword))
+        .filter((it) => !(it.id.startsWith('book_') && s.items[it.id]) && !(it.id === 'ironsword' && s.items.ironsword) && !(it.id === 'torch' && !s.flags.aqueductOpen))
         .map<MethodDef>((it) => ({
           id: `buy:${it.id}`,
           label: `${it.name}（${it.price}銅貨）`,

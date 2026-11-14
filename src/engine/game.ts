@@ -7,6 +7,7 @@ import { fmt, resolveLines } from './text';
 import { consolidate, markRepetition, rust } from './growth';
 import { ALL_STATS, band, clamp } from './stats';
 import { playerMove, type PlayerMove } from './combat';
+import { weeklyAffiliations } from './affil';
 import { BREAKTHROUGH, RISE } from '../content/selftext';
 
 // ───────── 表示用 ─────────
@@ -127,7 +128,7 @@ export function beginGame(s: GameState) {
 }
 
 function checkSlotEvents(s: GameState) {
-  if (s.scene || s.combat || s.dead || s.ended) return;
+  if (s.scene || s.combat || s.dead || s.ended || s.explore) return;
   const ev = findEvent(s, 'slot');
   if (ev) startEvent(s, ev.id);
 }
@@ -225,6 +226,9 @@ export function endDay(s: GameState) {
     s.quest = null;
   }
 
+  // 週の終わり：所属の清算
+  if (s.day % 7 === 0) notes.push(...weeklyAffiliations(s));
+
   const perceived = perceptionLines(before, s);
   const text = [...s.today, ...notes.map((t) => fmt(s, t))];
   for (const p of perceived) text.push(p);
@@ -287,6 +291,7 @@ export function doAction(s: GameState, activityId: string, methodId: string, ctx
   const key = `${a.id}:${m.id}${ctx.focus ? ':' + ctx.focus : ''}`;
   s.lastAction = key;
   s.counters[`act:${a.id}`] = (s.counters[`act:${a.id}`] ?? 0) + (m.slots ?? 1);
+  const sceneBefore = s.scene;
   const lines = m.run(s, ctx).map((l) => ({ who: l.who, text: fmt(s, l.text) }));
   markRepetition(s, key);
   const ev = s.flags._start as string | undefined;
@@ -294,6 +299,11 @@ export function doAction(s: GameState, activityId: string, methodId: string, ctx
     // 行動がイベント（依頼への出発など）を開始する場合
     delete s.flags._start;
     startEvent(s, ev);
+    return;
+  }
+  // 行動が探索や戦闘、イベントを始めた場合は、結果の文を挟まない
+  if (s.explore || s.combat || s.scene !== sceneBefore) {
+    if (m.late && s.slot === 3) s.flags._late = true;
     return;
   }
   if (m.late && s.slot === 3) s.flags._late = true;

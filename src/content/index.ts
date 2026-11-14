@@ -10,8 +10,9 @@ import { CORE_ACTIVITY, QUESTS, QUEST_ACTIVITY, QUEST_EVENTS, TEST_ACTIVITY } fr
 import { ENEMIES, ITEMS, LOCATIONS } from './world';
 import { ENEMIES_1B, EVENTS_1B, QUEST_RUIN, extendNpcs } from './chapter1b';
 import { ACTIVITIES2, EVENTS2, NPCS2 } from './npcs2';
+import { ACTIVITIES_2, EVENTS_CH2, NPCS_CH2, registerCh2 } from './chapter2';
 
-const ALL_NPCS = [...NPCS, ...NPCS2];
+const ALL_NPCS = [...NPCS, ...NPCS2, ...NPCS_CH2];
 
 const MAX_TOPICS = 2;
 
@@ -80,11 +81,13 @@ export function loadContent() {
   extendNpcs(ALL_NPCS);
   for (const q of QUESTS) R.quests.set(q.id, q);
   for (const npc of ALL_NPCS) R.npcs.set(npc.id, npc);
-  R.activities.push(QUEST_ACTIVITY, CORE_ACTIVITY, TEST_ACTIVITY, ...ACTIVITIES, ...ACTIVITIES2);
+  registerCh2();
+  R.activities.push(QUEST_ACTIVITY, CORE_ACTIVITY, TEST_ACTIVITY, ...ACTIVITIES, ...ACTIVITIES2, ...ACTIVITIES_2);
   registerEvents(EVENTS);
   registerEvents(QUEST_EVENTS);
   registerEvents(EVENTS_1B);
   registerEvents(EVENTS2);
+  registerEvents(EVENTS_CH2);
   registerEvents(ALL_NPCS.map((n2) => buildTalkEvent(n2.id)));
 }
 

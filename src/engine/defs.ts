@@ -154,3 +154,48 @@ export interface ItemDef {
 }
 
 export type { RelAxis };
+
+export interface AffiliationDef {
+  id: string;
+  name: string;
+  /** 所属の説明（何ができ、何を求められるか） */
+  desc: string;
+  /** 週に求められる義務（時間帯の数）。0なら義務なし */
+  dutyPerWeek: number;
+  dutyLabel: string;
+  pay: number; // 週ごとの給金
+  /** 義務を果たせなかった週が続くと、この数で除名される */
+  dismissAfter: number;
+}
+
+export interface DLink {
+  to: string;
+  label: string;
+  cond?: Cond;
+  /** 条件を満たさないときに示す理由 */
+  blocked?: string;
+}
+
+export interface DNode {
+  name: string;
+  desc: Txt | ((s: GameState) => string);
+  links: DLink[];
+  /** 初めて入ったときに再生するイベント */
+  story?: string;
+  /** 入るたびの遭遇（敵ID と確率） */
+  encounter?: { enemy: string; chance: number };
+  /** 調べたときの結果（一度きり） */
+  search?: (s: GameState) => string;
+  /** 地上へ戻れる場所 */
+  exit?: boolean;
+  /** その場で何度でも行える行動（イベントを再生する） */
+  action?: { label: string; event: string; cond?: Cond };
+}
+
+export interface DungeonDef {
+  id: string;
+  name: string;
+  start: string;
+  surface: string; // 戻ったときの地上の場所
+  nodes: Record<string, DNode>;
+}
