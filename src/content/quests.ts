@@ -74,7 +74,7 @@ function questAvailable(s: GameState, q: QuestDef) {
   if (q.cond && !q.cond(s)) return false;
   // 達成済みの依頼は、しばらくすると再び貼り出される
   const last = s.flags[`questDone:${q.id}`] as number | undefined;
-  if (last !== undefined && (q.id === 'q_sample' || s.day - last < 6)) return false;
+  if (last !== undefined && (q.id === 'q_sample' || q.id === 'q_ruin' || s.day - last < 6)) return false;
   return true;
 }
 
@@ -161,7 +161,8 @@ function report(s: GameState, q: QuestDef) {
   s.flags.lastQuestFailed = false;
   rel(s, 'sera', 'trust', quality >= 1 ? 2.5 : 0.5);
   rel(s, 'sera', 'respect', 1);
-  if (q.giver === 'noin') s.flags.sampleDelivered = true;
+  if (q.id === 'q_sample') s.flags.sampleDelivered = true;
+  if (q.id === 'q_ruin') s.flags.ruinDelivered = true;
   const lines = [
     n(`「${q.title}」の報告をして、${pay}銅貨を受け取った。`),
     quality < 1
@@ -185,7 +186,7 @@ export const TEST_ACTIVITY: ActivityDef = {
       id: 'apply',
       label: '審査を申し込む',
       desc: 'ガラドとの立ち合いで力を示す。',
-      cond: (s) => canTakeTest(s) && R.npcs.get('garad')!.where(s) === 'training',
+      cond: (s) => canTakeTest(s) && (R.npcs.get('garad')!.where(s) === 'training' || (!!s.flags.garadQuit && s.slot <= 2)),
       run: (s) => {
         s.flags._start = 'rank_test';
         return [];

@@ -138,8 +138,33 @@ export function advance(s: GameState, slots = 1) {
   for (let i = 0; i < slots; i++) {
     s.slot += 1;
     if (s.slot > 3) endDay(s);
+    if (i < slots - 1) {
+      const ev = findInterrupt(s);
+      if (ev) {
+        startEvent(s, ev.id);
+        return;
+      }
+    }
   }
   checkSlotEvents(s);
+}
+
+function findInterrupt(s: GameState): EventDef | undefined {
+  for (const ev of R.events.values()) {
+    if (!ev.interrupt || ev.trigger !== 'slot') continue;
+    if (ev.once && s.seen[ev.id] !== undefined) continue;
+    if (ev.cond && !ev.cond(s)) continue;
+    return ev;
+  }
+  return undefined;
+}
+
+/** 同行できる仲間（その場にいる者と、パーティーを組んだ者） */
+export function availableCompanions(s: GameState, loc: string): string[] {
+  const ids = new Set(npcsAt(s, loc).map((n) => n.id).filter((id) => id === 'lyne' || id === 'garad'));
+  const ly = s.npcs.lyne;
+  if (s.flags.lyneParty && ly && ly.alive && ly.away <= 0 && !s.flags.lyneLeft && s.slot <= 2) ids.add('lyne');
+  return [...ids];
 }
 
 export const LIVING_COST = 10;
@@ -255,6 +280,7 @@ export function doAction(s: GameState, activityId: string, methodId: string, ctx
   s.location = a.loc;
   const key = `${a.id}:${m.id}${ctx.focus ? ':' + ctx.focus : ''}`;
   s.lastAction = key;
+  s.counters[`act:${a.id}`] = (s.counters[`act:${a.id}`] ?? 0) + (m.slots ?? 1);
   const lines = m.run(s, ctx).map((l) => ({ who: l.who, text: fmt(s, l.text) }));
   markRepetition(s, key);
   const ev = s.flags._start as string | undefined;

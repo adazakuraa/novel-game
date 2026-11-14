@@ -900,14 +900,21 @@ const encounter: EventDef = {
       lines: [],
       effect: (s) => {
         const e = s.flags._encounter as string;
+        const comp = s.flags._encounterComp as string | undefined;
+        const safe = !!s.flags._encounterSafe;
         delete s.flags._encounter;
+        delete s.flags._encounterComp;
+        delete s.flags._encounterSafe;
+        s.flags._encComp = comp ?? '';
+        s.flags._encSafe = safe;
         startCombat(s, {
           enemy: e,
           dist: e === 'boar' ? 3 : 2,
+          companion: comp,
           onWin: { ev: 'encounter', node: 'win' },
           onLose: { ev: 'encounter', node: 'lose' },
           onFlee: { ev: 'encounter', node: 'flee' },
-          loseMeansDeath: (s.counters.rescued ?? 0) >= 1,
+          loseMeansDeath: !comp && !safe && (s.counters.rescued ?? 0) >= 1,
         });
       },
     },
@@ -923,6 +930,27 @@ const encounter: EventDef = {
       effect: (s) => log(s, '森の縁で魔物に出くわし、逃げ帰った。'),
     },
     lose: {
+      lines: [],
+      next: (s) => (s.flags._encComp ? 'lose_comp' : s.flags._encSafe ? 'lose_safe' : 'lose_alone'),
+    },
+    lose_comp: {
+      lines: [
+        n('地面に倒れた{I}の前に、誰かが立ちはだかった。'),
+        (s) => say(s.flags._encComp as string, '下がって！　……立てる？　肩、貸すから。'),
+        n('魔物を追い払ったあと、二人で足を引きずりながら東門まで戻った。'),
+      ],
+      effect: (s) => {
+        const c = s.flags._encComp as string;
+        rel(s, c, 'debt', -3);
+        rel(s, c, 'trust', 2);
+        log(s, '森の縁で魔物に敗れ、仲間に助けられた。');
+      },
+    },
+    lose_safe: {
+      lines: [n('膝をついた{I}の脇を、兵士たちの槍が突き抜けた。'), say('守備隊の兵士', '下がってろ、冒険者。……生きてるな？　なら上等だ。')],
+      effect: (s) => log(s, '夜警の最中に狼に敗れ、兵士たちに助けられた。'),
+    },
+    lose_alone: {
       lines: [
         n('地面に倒れた{I}の上に、魔物の影が覆いかぶさる。'),
         n('そのとき、角笛の音が響いた。'),
@@ -961,22 +989,6 @@ const smallTide: EventDef = {
         s.flags.smallTide = true;
         log(s, '小潮が始まった。森の魔物が増えるらしい。');
       },
-    },
-  },
-};
-
-const chapterNote: EventDef = {
-  id: 'chapter_note',
-  trigger: 'slot',
-  priority: 90,
-  once: true,
-  cond: (s) => s.day >= 31 && slot(s, 0),
-  nodes: {
-    start: {
-      lines: [
-        n('――第1章「澱潮の春」は、ここから先も続いていく予定です。'),
-        n('（開発中のお知らせ：31日目以降の物語イベントは今後のアップデートで追加されます。日常の行動・訓練・依頼・人との交流は、引き続き自由に行えます。）'),
-      ],
     },
   },
 };
@@ -1139,7 +1151,6 @@ export const EVENTS: EventDef[] = [
   lyneReportedAfter,
   encounter,
   smallTide,
-  chapterNote,
   martaNight,
   timoMeet,
   timoLost,

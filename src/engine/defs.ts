@@ -34,6 +34,8 @@ export interface EventDef {
   weight?: number;
   once?: boolean;
   cooldown?: number; // 日数
+  /** 複数の時間帯を使う行動の途中でも割り込んで発生する（大事件用） */
+  interrupt?: boolean;
   start?: string;
   nodes: Record<string, NodeDef>;
 }
