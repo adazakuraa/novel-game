@@ -11,6 +11,8 @@ import { ENEMIES, ITEMS, LOCATIONS } from './world';
 import { ENEMIES_1B, EVENTS_1B, QUEST_RUIN, extendNpcs } from './chapter1b';
 import { ACTIVITIES2, EVENTS2, NPCS2 } from './npcs2';
 import { ACTIVITIES_2, EVENTS_CH2, NPCS_CH2, registerCh2 } from './chapter2';
+import { GIFT_REACTIONS, MARTA_GRAVE_TOPICS, STORYLETS } from './storylets';
+import { remember } from '../engine/npc';
 
 const ALL_NPCS = [...NPCS, ...NPCS2, ...NPCS_CH2];
 
@@ -34,6 +36,20 @@ function buildTalkEvent(npcId: string): EventDef {
     },
     next: `t:${t.id}`,
   }));
+  const gift = GIFT_REACTIONS[npcId];
+  if (gift) {
+    choices.push({
+      text: '花を渡す',
+      cond: (s) => (s.items.flower ?? 0) > 0 && s.flags[`gift:${npcId}`] !== s.day,
+      effect: (s) => {
+        s.items.flower -= 1;
+        s.flags[`gift:${npcId}`] = s.day;
+        rel(s, npcId, 'affinity', 3);
+        remember(s, npcId, `gift:${s.day}`, '花を渡した。');
+      },
+      next: 'gift',
+    });
+  }
   choices.push({ text: '話を切り上げる', next: 'bye' });
 
   nodes.start = {
@@ -51,6 +67,7 @@ function buildTalkEvent(npcId: string): EventDef {
     },
     choices,
   };
+  if (gift) nodes.gift = { lines: [{ who: npcId, text: gift[0] }, { text: gift[1] }], next: 'menu' };
   nodes.menu = {
     lines: [(s) => (((s.flags._talkCount as number) ?? 0) >= MAX_TOPICS ? n('（そろそろ話を切り上げる頃合いだ）') : n('（他に何を話そう）'))],
     choices,
@@ -82,12 +99,14 @@ export function loadContent() {
   for (const q of QUESTS) R.quests.set(q.id, q);
   for (const npc of ALL_NPCS) R.npcs.set(npc.id, npc);
   registerCh2();
+  R.npcs.get('marta')?.topics.push(...MARTA_GRAVE_TOPICS);
   R.activities.push(QUEST_ACTIVITY, CORE_ACTIVITY, TEST_ACTIVITY, ...ACTIVITIES, ...ACTIVITIES2, ...ACTIVITIES_2);
   registerEvents(EVENTS);
   registerEvents(QUEST_EVENTS);
   registerEvents(EVENTS_1B);
   registerEvents(EVENTS2);
   registerEvents(EVENTS_CH2);
+  registerEvents(STORYLETS);
   registerEvents(ALL_NPCS.map((n2) => buildTalkEvent(n2.id)));
 }
 

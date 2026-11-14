@@ -125,8 +125,10 @@ export function availableMoves(s: GameState): { id: PlayerMove; label: string }[
 }
 
 function weaponBonus(s: GameState) {
-  if (s.items.ironsword) return 7;
-  if (s.items.oldsword) return 3;
+  const sharp = (s.flags.sharpUntil as number | undefined) ?? 0;
+  const edge = s.day <= sharp ? 1.5 : 0;
+  if (s.items.ironsword) return 7 + edge;
+  if (s.items.oldsword) return 3 + edge;
   return 0;
 }
 
@@ -202,8 +204,13 @@ export function playerMove(s: GameState, move: PlayerMove): CombatResult {
       if (it.type === 'reposition') log.push('相手は動き続けていて、狙いが定まらない。');
       const bonus = (lunge ? -0.12 : 0) + (it.type === 'reposition' ? -0.15 : 0) + (it.type === 'retreat' || it.type === 'call' ? 0.15 : 0);
       if (heroHit(s, c, bonus)) {
-        heroDealt = heroDamage(s, c, it.type === 'call' ? 1.2 : 1);
-        log.push(lunge ? '踏み込みざまに剣を振るう。手応えがあった。' : '振り下ろした剣が、確かに相手を捉えた。');
+        // 会心：予兆を読み切っているほど、また有利な体勢ほど出やすい
+        const crit = chance(s, 0.08 + (lv === 2 ? 0.1 : 0) + Math.max(0, c.edge) * 0.08);
+        heroDealt = heroDamage(s, c, (it.type === 'call' ? 1.2 : 1) * (crit ? 1.8 : 1));
+        if (crit) {
+          log.push('【会心】刃が、吸い込まれるように急所へ入った。腕に、骨まで響く確かな手応え。');
+          s.counters.crits = (s.counters.crits ?? 0) + 1;
+        } else log.push(lunge ? '踏み込みざまに剣を振るう。手応えがあった。' : '振り下ろした剣が、確かに相手を捉えた。');
       } else {
         log.push(lunge ? '踏み込んだが、刃は空を切った。' : '剣は相手をかすめただけだった。');
       }

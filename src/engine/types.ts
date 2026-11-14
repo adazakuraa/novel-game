@@ -53,6 +53,7 @@ export interface NpcState {
 export interface Line {
   who?: string; // 話者（NPC id か表示名）。未指定は地の文
   text: string;
+  tone?: 'good' | 'bad'; // 強調（好調・会心・怪我など）
 }
 
 export interface JournalEntry {

@@ -70,6 +70,22 @@ export const ITEMS: ItemDef[] = [
       },
     },
   },
+  { id: 'flower', name: '花', desc: '市場で買った小さな花。誰かに渡せば、喜ぶかもしれない（人と話すときに渡せる）。' },
+  {
+    id: 'candy',
+    name: '飴玉',
+    desc: '迷い猫のお礼にもらった飴玉。少し汗でべたついている。',
+    use: {
+      label: 'なめる',
+      run: (s) => {
+        s.cond.stress = Math.max(0, s.cond.stress - 6);
+        return '飴玉を口に入れる。甘い。ミナの笑顔を思い出した。';
+      },
+    },
+  },
+  { id: 'glowbloom', name: '澱咲きの花', desc: '澱溜まりのほとりに咲いていた、青白く透ける花。' },
+  { id: 'irontag', name: '錆びた鉄の札', desc: '森の縁の墓標の根元で見つけた。裏に「マルタへ」と刻まれている。' },
+  { id: 'woodbird', name: '木彫りの小鳥', desc: '花月の祭りで、リーネが射的で取った景品。捨てたら怒られる。' },
   { id: 'torch', name: '松明', desc: '地下を照らす松明。一本で、およそ八歩ぶんもつ。', price: 4 },
   { id: 'oldsword', name: '古い長剣', desc: '中古屋で買った剣。刃こぼれはあるが、まだ使える。' },
   { id: 'ironsword', name: '鍛鉄の剣', desc: '東市場の鍛冶屋が打った新品の剣。重心がいい。', price: 380 },

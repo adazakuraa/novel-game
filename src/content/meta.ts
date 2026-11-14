@@ -1,5 +1,5 @@
 // 実装状況の表示用（タイトル画面）
-export const GAME_VERSION = 'v0.4';
+export const GAME_VERSION = 'v0.5';
 
 export const CHAPTERS: { title: string; status: string }[] = [
   { title: '第1章「澱潮の春」', status: '完結' },

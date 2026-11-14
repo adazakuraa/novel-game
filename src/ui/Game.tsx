@@ -6,6 +6,8 @@ import {
   activitiesAt,
   advance,
   availableCompanions,
+  repeatable,
+  TRAINING_ACTS,
   choose,
   combatAct,
   doAction,
@@ -25,6 +27,7 @@ import { SELF } from '../content/selftext';
 import { searchActions, type SearchHit } from '../engine/search';
 import { act as actHere, currentNode, exitDungeon, linkOpen, move, nodeLines, search as searchHere, torchWords } from '../engine/explore';
 import { affiliationList } from '../engine/affil';
+import { concerns } from '../content/concerns';
 
 type Tab = 'act' | 'journal' | 'people' | 'items' | 'system';
 
@@ -134,7 +137,7 @@ function Lines({ lines }: { lines: Line[] }) {
             <span class="say">「{l.text}」</span>
           </p>
         ) : (
-          <p>{l.text}</p>
+          <p class={l.tone ?? ''}>{l.text}</p>
         ),
       )}
     </div>
@@ -161,6 +164,21 @@ function Scene({ s, update }: { s: GameState; update: Props['update'] }) {
             続ける
           </button>
         )}
+        {v.canContinue && s.scene?.kind === 'inline' && s.scene.then === 'advance' && s.scene.slots !== 0 && s.slot < 3 && repeatable(s) && (
+          <button
+            class="btn ghost"
+            onClick={() =>
+              update((st) => {
+                proceed(st);
+                if (st.scene || st.combat || st.explore) return;
+                const r = repeatable(st);
+                if (r) doAction(st, r.a, r.m, { focus: r.f, companion: r.c });
+              })
+            }
+          >
+            続けて、同じことをする
+          </button>
+        )}
       </div>
     </div>
   );
@@ -179,9 +197,7 @@ function Combat({ s, update }: { s: GameState; update: Props['update'] }) {
         <span class="dist">{distName(c.dist)}</span>
       </div>
       <div class="novel">
-        {c.log.map((l) => (
-          <p>{l}</p>
-        ))}
+        {c.log.map((l) => (l.startsWith('【会心】') ? <p class="good crit">{l.slice(4)}</p> : <p>{l}</p>))}
         <p class="enemy-state">{enemyStateText(s)}</p>
         <p class="tell">{tell.text}</p>
         {tell.read && <p class="read">――{tell.read}</p>}
@@ -265,6 +281,7 @@ function Planner({ s, update }: { s: GameState; update: Props['update'] }) {
   return (
     <div class="planner">
       <FreeInput s={s} update={update} />
+      <Concerns s={s} />
       <div class="locs">
         {locs.map((l) => {
           const o = locationOpen(s, l.id);
@@ -308,6 +325,21 @@ function Planner({ s, update }: { s: GameState; update: Props['update'] }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function Concerns({ s }: { s: GameState }) {
+  const list = concerns(s);
+  if (!list.length) return null;
+  return (
+    <div class="concerns">
+      <span class="sub-label">気になっていること</span>
+      <ul>
+        {list.map((t) => (
+          <li>{t}</li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -358,6 +390,7 @@ function Activity({ s, a, open, toggle, update }: { s: GameState; a: ActivityDef
   const [method, setMethod] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | undefined>(undefined);
   const [comp, setComp] = useState<string | undefined>(undefined);
+  const [push, setPush] = useState(false);
   const m: MethodDef | undefined = methods.find((x) => x.id === method);
   const focuses = m?.focuses?.filter((f) => !f.cond || f.cond(s)) ?? [];
   const companions = m?.companions ? availableCompanions(s, a.loc).map((id) => R.npcs.get(id)!) : [];
@@ -410,9 +443,15 @@ function Activity({ s, a, open, toggle, update }: { s: GameState; a: ActivityDef
               </div>
             </div>
           )}
+          {m && TRAINING_ACTS.has(a.id) && (m.slots ?? 1) > 0 && (
+            <label class="push">
+              <input type="checkbox" checked={push} onChange={(e) => setPush((e.target as HTMLInputElement).checked)} />
+              限界まで追い込む（伸びは大きいが、疲れ、怪我をしやすい）
+            </label>
+          )}
           {m?.warn?.(s, { companion: comp }) && <p class="method-warn">{m.warn(s, { companion: comp })}</p>}
           {m && (
-            <button class="btn primary do" onClick={() => update((st) => doAction(st, a.id, m.id, { focus, companion: comp }))}>
+            <button class="btn primary do" onClick={() => update((st) => doAction(st, a.id, m.id, { focus, companion: comp, push }))}>
               {(m.slots ?? 1) === 0 ? '行う' : (m.slots ?? 1) > 1 ? `行う（${m.slots}つの時間帯）` : '行う'}
             </button>
           )}

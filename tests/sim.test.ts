@@ -71,6 +71,7 @@ describe('simulation', () => {
         expect(s.seen.great_tide).toBeDefined();
         expect(s.seen.epilogue).toBeDefined();
       }
+      console.log(`  pacing: events/day=${((s.counters.eventsFired ?? 0) / s.day).toFixed(2)} goodDays=${s.counters.goodDays ?? 0} crits=${s.counters.crits ?? 0}`);
       console.log(`  ch2: seen=${['ch2_start','aurelia_arrive','godwin_arrive','hans_offer','town_meeting','aq_mural','aq_hall'].filter((k) => s.seen[k] !== undefined).join(',')} affil=${Object.keys(s.affil ?? {}).join(',')} torch=${s.items.torch ?? 0}`);
       console.log(`  tide: choice=${s.flags.tideChoice} prep=${['guildPrepared','garrisonPrepared','ruleAdopted','seraGaradReconciled'].filter((k) => s.flags[k]).join(',')} village=${s.flags.villageSaved} heavy=${s.flags.gateHeavy} garadDied=${!!s.flags.garadDied} lyneLeft=${!!s.flags.lyneLeft} events=${Object.keys(s.seen).length}`);
       for (const k of Object.keys(s.stats)) expect(Number.isFinite(s.stats[k as keyof typeof s.stats])).toBe(true);
