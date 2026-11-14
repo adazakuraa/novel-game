@@ -5,6 +5,8 @@ import { trainingDays } from './npcs';
 import { canTakeTest } from './events';
 import { TIDE_DAY } from './chapter1b';
 import { isMember } from '../engine/affil';
+import { merit, RANKS } from '../engine/progress';
+import { ambitionOf, canExam } from './ambitions';
 
 export function concerns(s: GameState): string[] {
   const out: string[] = [];
@@ -19,6 +21,16 @@ export function concerns(s: GameState): string[] {
   if (s.rank === 0 && s.flags.testOpen) push(canTakeTest(s) ? '昇級審査を受けられる（訓練場でガラドに申し込む）' : '昇級審査には、まだ足りないものがある（訓練場で確かめられる）');
   if (s.rank === 0 && s.flags.boardOpen && (s.counters.questDone ?? 0) === 0) push('最初の依頼をこなす（ギルドの掲示板）');
 
+  const amb = ambitionOf(s);
+  if (amb) {
+    const nextMs = amb.milestones.find((m) => s.flags[`ms:${m.id}`] === undefined);
+    if (nextMs) push(`【${amb.name}】次は「${nextMs.label}」`);
+  }
+  if (s.rank === 1 || s.rank === 2) {
+    const nr = s.rank + 1;
+    const need = nr === 2 ? 50 : 130;
+    push(canExam(s, nr) ? `${RANKS[nr]}の昇級審査を受けられる（ギルド）` : `${RANKS[nr]}まで：貢献 ${merit(s)}／${need}`);
+  }
   if (s.flags.prediction !== undefined && s.seen.great_tide === undefined) push(`大潮の夜まで、あと${TIDE_DAY - s.day}日`);
   if (s.flags.prediction !== undefined && !s.npcs.noin.topicsUsed.warn && s.seen.great_tide === undefined) push('大潮の予測を、誰かに伝えるべきか');
   if (s.flags.noinQuest && s.flags['questDone:q_sample'] === undefined) push('ノインに頼まれた、澱溜まりの泥');
@@ -41,5 +53,5 @@ export function concerns(s: GameState): string[] {
   if (s.cond.injuries.some((i) => i.severity >= 2)) push('深い傷が治るまで、無理はしないほうがいい');
   if ((s.counters.tab ?? 0) > 0) push(`マルタに待ってもらっている宿代（${s.counters.tab}銅貨）`);
   else if (s.money < 20) push('手持ちが心もとない');
-  return out.slice(0, 5);
+  return out.slice(0, 6);
 }

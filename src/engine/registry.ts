@@ -11,6 +11,8 @@ export const R = {
   items: new Map<string, ItemDef>(),
   affiliations: new Map<string, AffiliationDef>(),
   dungeons: new Map<string, DungeonDef>(),
+  /** 進み具合の確認（志の到達点など）。新しく起きたことを文で返す */
+  progressHooks: [] as ((s: import('./types').GameState) => string[])[],
 };
 
 export function registerEvents(list: EventDef[]) {

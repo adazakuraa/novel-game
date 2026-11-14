@@ -28,8 +28,11 @@ import { searchActions, type SearchHit } from '../engine/search';
 import { act as actHere, currentNode, exitDungeon, linkOpen, move, nodeLines, search as searchHere, torchWords } from '../engine/explore';
 import { affiliationList } from '../engine/affil';
 import { concerns } from '../content/concerns';
+import { AMBITIONS, ambitionOf, canExam } from '../content/ambitions';
+import { RANKS as RANK_NAMES, STAT_LABELS, merit, stageOf, statView, wallHint, type StatView } from '../engine/progress';
+import { ATTRS, SKILLS } from '../engine/stats';
 
-type Tab = 'act' | 'journal' | 'people' | 'items' | 'system';
+type Tab = 'act' | 'journal' | 'growth' | 'people' | 'items' | 'system';
 
 interface Props {
   state: GameState;
@@ -96,6 +99,8 @@ export function Game(p: Props) {
           )
         ) : tab === 'journal' ? (
           <Journal s={s} />
+        ) : tab === 'growth' ? (
+          <Growth s={s} update={p.update} />
         ) : tab === 'people' ? (
           <People s={s} />
         ) : tab === 'items' ? (
@@ -110,12 +115,13 @@ export function Game(p: Props) {
             [
               ['act', busy ? '物語' : '行動'],
               ['journal', '日誌'],
+              ['growth', '成長'],
               ['people', '人物'],
               ['items', '持ち物'],
               ['system', '記録'],
             ] as [Tab, string][]
           ).map(([t, l]) => (
-            <button class={`tab ${tab === t ? 'on' : ''}`} disabled={busy && t !== 'act' && t !== 'journal' && t !== 'people'} onClick={() => setTab(t)}>
+            <button class={`tab ${tab === t ? 'on' : ''}`} disabled={busy && t !== 'act' && t !== 'journal' && t !== 'people' && t !== 'growth'} onClick={() => setTab(t)}>
               {l}
             </button>
           ))}
@@ -510,6 +516,142 @@ function Journal({ s }: { s: GameState }) {
           <p class="muted small">これは主人公自身の感じ方です。思い込みや、まだ自覚していない才能もあるかもしれません。</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ───────── 成長 ─────────
+
+function Bar({ ratio }: { ratio: number }) {
+  return (
+    <span class="bar">
+      <span style={{ width: `${Math.round(ratio * 100)}%` }} />
+    </span>
+  );
+}
+
+function Growth({ s, update }: { s: GameState; update: Props['update'] }) {
+  const view = statView(s);
+  const amb = ambitionOf(s);
+  const m = merit(s);
+  const next = s.rank + 1;
+  const need = next === 1 ? 0 : next === 2 ? 50 : next === 3 ? 130 : 300;
+  const busy = !!s.scene || !!s.combat || !!s.explore;
+  const row = (k: StatKey) => {
+    const v = s.stats[k];
+    const st = stageOf(v);
+    const pend = s.pending[k] ?? 0;
+    return (
+      <div class="stat-row">
+        <span class="stat-name">{STAT_LABELS[k]}</span>
+        {view === 'number' ? (
+          <span class="stat-val">
+            {v.toFixed(1)}
+            {pend > 0.05 && <span class="pend"> +{pend.toFixed(1)}</span>}
+          </span>
+        ) : (
+          <span class="stat-val">
+            {st.name}
+            {pend > 0.05 && <span class="pend"> ↑</span>}
+          </span>
+        )}
+        <Bar ratio={st.ratio} />
+      </div>
+    );
+  };
+  return (
+    <div class="growth">
+      <section class="g-card">
+        <h3>等級</h3>
+        <p>
+          <strong>{RANK_NAMES[s.rank]}</strong>　ギルドへの貢献 <strong>{m}</strong>
+        </p>
+        {next <= 3 && (
+          <>
+            <p class="small">
+              次の等級（{RANK_NAMES[next]}）：貢献 {need} 以上
+              {next === 1 ? '、依頼1件以上、講習、ガラドとの立ち合い（訓練場）' : next === 2 ? '、試験依頼（ギルド）' : '、試験依頼（ギルド）'}
+            </p>
+            {need > 0 && <Bar ratio={Math.min(1, m / need)} />}
+            {(next === 2 || next === 3) && canExam(s, next) && <p class="good-note">審査を受けられる。午前中にギルドで申し込もう。</p>}
+          </>
+        )}
+        <p class="muted small">貢献は、依頼の達成・魔物の討伐・夜警で積み上がる。依頼を投げ出すと減る。</p>
+      </section>
+
+      <section class="g-card">
+        <h3>志</h3>
+        {amb ? (
+          <>
+            <p>
+              <strong>{amb.name}</strong>　<span class="muted small">{amb.desc}</span>
+            </p>
+            <ul class="ms">
+              {amb.milestones.map((x) => {
+                const d = s.flags[`ms:${x.id}`] !== undefined;
+                return <li class={d ? 'done' : ''}>{d ? '✓' : '□'} {x.label}</li>;
+              })}
+            </ul>
+            <details>
+              <summary class="muted small">志を変える</summary>
+              {AMBITIONS.filter((a) => a.id !== amb.id).map((a) => (
+                <button class="btn small ghost" disabled={busy} onClick={() => update((st) => (st.flags.ambition = a.id))}>
+                  {a.name}
+                </button>
+              ))}
+            </details>
+          </>
+        ) : (
+          <>
+            <p class="muted small">何を目指すかを定めると、そこまでの道のりが見えるようになる。</p>
+            {AMBITIONS.map((a) => (
+              <button class="method" disabled={busy} onClick={() => update((st) => (st.flags.ambition = a.id))}>
+                <span class="method-label">{a.name}</span>
+                <span class="method-desc">{a.desc}</span>
+              </button>
+            ))}
+          </>
+        )}
+      </section>
+
+      <section class="g-card">
+        <h3>能力</h3>
+        <div class="seg">
+          {(
+            [
+              ['hidden', '非表示'],
+              ['stage', '段階'],
+              ['number', '数値'],
+            ] as [StatView, string][]
+          ).map(([v, l]) => (
+            <button class={`seg-btn ${view === v ? 'on' : ''}`} onClick={() => update((st) => (st.flags.statView = v))}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {view === 'hidden' ? (
+          <div class="novel self">
+            {SELF_ORDER.map((k) => {
+              const t = SELF[k]?.[band(s.stats[k])];
+              return t ? <p>{fmt(s, t)}</p> : null;
+            })}
+          </div>
+        ) : (
+          <>
+            <h4>体と心</h4>
+            {ATTRS.map(row)}
+            <h4>技能</h4>
+            {SKILLS.map((k) => (
+              <div class="skill">
+                {row(`${k}_p` as StatKey)}
+                {row(`${k}_t` as StatKey)}
+                {wallHint(s, k) && <p class="wall">{wallHint(s, k)}</p>}
+              </div>
+            ))}
+            <p class="muted small">「↑」は、まだ体に馴染んでいない今日の経験。眠ると身につく。</p>
+          </>
+        )}
+      </section>
     </div>
   );
 }
