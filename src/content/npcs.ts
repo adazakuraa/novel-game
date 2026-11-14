@@ -586,6 +586,8 @@ export const NPCS: NpcDef[] = [
     id: 'garad',
     name: 'ガラド',
     where: (s) => {
+      if (!s.npcs.garad.alive) return null;
+      if (s.flags.garadQuit && !s.flags.garadReturned) return s.slot === 3 ? 'inn' : s.slot >= 1 ? 'gate' : null;
       if (s.slot <= 2) return s.day % 7 === 0 ? null : 'training';
       return s.day % 3 === 0 ? 'inn' : null;
     },
@@ -607,6 +609,7 @@ export const NPCS: NpcDef[] = [
     id: 'lyne',
     name: 'リーネ',
     where: (s) => {
+      if (s.flags.lyneLeft) return null;
       if (s.slot === 0) return 'training';
       if (s.slot === 1) return s.day % 2 ? 'guild' : 'training';
       if (s.slot === 2) return s.day % 3 === 0 ? 'market' : 'training';

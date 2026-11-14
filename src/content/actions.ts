@@ -519,6 +519,15 @@ function rumor(s: GameState): string {
   ];
   if (s.day > 20) pool.push('「森の縁で、でかい熊の足跡を見たって奴がいる」');
   if (s.day > 25) pool.push('「今年は潮の年だろ。七年ぶりの」「縁起でもねえ」');
+  if (s.flags.tideRising && !s.seen.great_tide) {
+    pool.length = 0;
+    pool.push('「魔核の値が跳ね上がってる。今のうちに森で稼がなきゃ損だ」', '露店の主人たちが、夜は店を早じまいすると話している。', '「門の外の開拓村の連中、街に避難しなくて大丈夫なのか」');
+    if (s.flags.guildPrepared) pool.push('「ギルドが森の奥での狩りを禁止したってよ。森人の予言を真に受けたらしい」');
+  }
+  if (s.seen.great_tide !== undefined) {
+    pool.push(s.flags.alphaSlain ? '「大潮の夜、群れ長を倒した新人がいたらしい」' : '「群れ長は、まだ森のどこかで生きてるらしい」');
+    pool.push(s.flags.gateHeavy ? '東門の外の墓地に、新しい墓標が並んでいる。花売りの娘が、白い花ばかり売れると言っていた。' : '「門の前に柵がなかったら、今頃どうなってたか」');
+  }
   return pick(s, pool);
 }
 
@@ -595,6 +604,13 @@ const institute: ActivityDef[] = [
 
 // ───────── 東門 ─────────
 
+/** 仲間と一緒に行動したときの関係の変化 */
+function withPartner(s: GameState, id: string) {
+  rel(s, id, 'affinity', 1.5);
+  rel(s, id, 'trust', 1);
+  s.counters[`with:${id}`] = (s.counters[`with:${id}`] ?? 0) + 1;
+}
+
 const gate: ActivityDef[] = [
   {
     id: 'wall',
@@ -626,7 +642,8 @@ const gate: ActivityDef[] = [
         label: '薬草を採る（2時間帯）',
         desc: '森の浅いところで薬草を探す。魔物に出くわすこともある。',
         slots: 2,
-        run: (s) => {
+        companions: true,
+        run: (s, { companion }) => {
           gain(s, 'herb_p', 1.4, { difficulty: 20, key: 'herb:gather' });
           gain(s, 'survival_p', 1.0, { difficulty: 20, key: 'survival:gather' });
           tire(s, 18);
@@ -634,8 +651,17 @@ const gate: ActivityDef[] = [
           const found = 1 + Math.floor(skillv / 6) + (chance(s, 0.5) ? 1 : 0);
           s.items.herb = (s.items.herb ?? 0) + found;
           log(s, `森の縁で薬草を${found}束摘んだ。`);
-          if (chance(s, 0.3)) s.flags._encounter = s.day > 6 && chance(s, 0.4) ? 'wolf' : 'rat';
-          return [n('東門を出て、森の縁の草地を歩く。木々の向こうは昼でも薄暗い。'), n(`薬草を${found}束摘んだ。`)];
+          const risk = s.flags.tideRising ? 0.45 : 0.3;
+          if (chance(s, risk)) {
+            s.flags._encounter = s.day > 6 && chance(s, s.flags.tideRising ? 0.7 : 0.4) ? 'wolf' : 'rat';
+            if (companion) s.flags._encounterComp = companion;
+          }
+          if (companion) withPartner(s, companion);
+          return [
+            n(companion ? `${R.npcs.get(companion)?.name}と二人で東門を出て、森の縁の草地を歩く。` : '東門を出て、森の縁の草地を歩く。木々の向こうは昼でも薄暗い。'),
+            n(`薬草を${found}束摘んだ。`),
+            ...(s.flags.tideRising ? [n('森の奥から、絶えず獣の気配がする。潮が満ちてきているのだ。')] : []),
+          ];
         },
       },
       {
@@ -644,13 +670,51 @@ const gate: ActivityDef[] = [
         desc: '魔核を得るため、自分から魔物を探す。危険を伴う。',
         cond: (s) => s.rank >= 1,
         slots: 2,
-        run: (s) => {
+        companions: true,
+        run: (s, { companion }) => {
           gain(s, 'survival_p', 1.2, { difficulty: 24, key: 'survival:hunt' });
           tire(s, 14);
-          log(s, '森の縁で魔物を探した。');
+          log(s, companion ? `${R.npcs.get(companion)?.name}と森の縁で魔物を探した。` : '森の縁で魔物を探した。');
           const r = s.stats.survival_p + s.stats.beast_p;
-          s.flags._encounter = chance(s, 0.25) ? 'boar' : chance(s, 0.7) ? 'wolf' : 'rat';
+          s.flags._encounter = chance(s, s.flags.tideRising ? 0.35 : 0.25) ? 'boar' : chance(s, 0.7) ? 'wolf' : 'rat';
+          if (companion) {
+            s.flags._encounterComp = companion;
+            withPartner(s, companion);
+          }
           return [n('森の縁に分け入り、獣道をたどる。'), n(r > 30 ? '折れた枝、踏まれた草。足跡を見つけた。新しい。' : 'しばらく歩き回るうちに、茂みの向こうで何かが動いた。')];
+        },
+      },
+    ],
+  },
+  {
+    id: 'nightwatch',
+    loc: 'gate',
+    label: '城壁の夜警',
+    cond: (s) => !!s.flags.tideRising && s.rank >= 1 && s.slot === 3 && !s.seen.great_tide,
+    methods: [
+      {
+        id: 'watch',
+        label: '夜警に加わる（報酬20銅貨）',
+        desc: '潮の間、ギルドが守備隊の夜警に人を出している。寝不足になる。',
+        late: true,
+        run: (s) => {
+          s.money += 20;
+          gain(s, 'will', 0.8, { difficulty: 24, key: 'mind:nightwatch' });
+          gain(s, 'focus', 0.6, { difficulty: 24, key: 'mind:nightwatch' });
+          gain(s, 'survival_t', 0.6, { difficulty: 22 });
+          gain(s, 'beast_t', 0.5, { difficulty: 22 });
+          tire(s, 18);
+          s.counters.nightwatch = (s.counters.nightwatch ?? 0) + 1;
+          log(s, '城壁の夜警に立った。');
+          if (chance(s, 0.25)) {
+            s.flags._encounter = 'wolf';
+            s.flags._encounterSafe = true;
+            return [n('篝火の明かりの外で、何かが城壁をよじ登ろうとしている。'), say('守備隊の兵士', '狼だ！　一匹、壁の上に来るぞ！')];
+          }
+          return [
+            n('篝火の脇で、守備隊の兵士たちと並んで夜の森を見張る。'),
+            n(pick(s, ['森の奥で、青白い光が明滅している。澱溜まりが脈打つように光る。', '一晩中、どこかで狼の遠吠えが続いていた。', '兵士の一人が、七年前の大潮の夜の話をしてくれた。門が破られかけたこと。冒険者たちが門の前で踏みとどまったこと。'])),
+          ];
         },
       },
     ],

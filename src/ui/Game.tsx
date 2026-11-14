@@ -5,6 +5,7 @@ import { R } from '../engine/registry';
 import {
   activitiesAt,
   advance,
+  availableCompanions,
   choose,
   combatAct,
   doAction,
@@ -258,7 +259,7 @@ function Activity({ s, a, open, toggle, update }: { s: GameState; a: ActivityDef
   const [comp, setComp] = useState<string | undefined>(undefined);
   const m: MethodDef | undefined = methods.find((x) => x.id === method);
   const focuses = m?.focuses?.filter((f) => !f.cond || f.cond(s)) ?? [];
-  const companions = m?.companions ? npcsAt(s, a.loc).filter((n) => n.id === 'lyne' || n.id === 'garad') : [];
+  const companions = m?.companions ? availableCompanions(s, a.loc).map((id) => R.npcs.get(id)!) : [];
 
   return (
     <div class={`act ${open ? 'open' : ''}`}>

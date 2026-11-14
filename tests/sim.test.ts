@@ -39,21 +39,26 @@ function step(s: GameState, r: () => number) {
 }
 
 describe('simulation', () => {
-  for (const seed of [1, 2, 3, 42, 777]) {
-    it(`runs 45 days without errors (seed ${seed})`, () => {
+  for (const seed of [1, 2, 3, 42, 777, 9, 10, 11]) {
+    it(`runs 95 days without errors (seed ${seed})`, () => {
       const s = createGame({ name: 'テスト', gender: 'x', pronoun: '私', mode: 'standard', seed }, NPC_IDS);
       beginGame(s);
       const r = makeRng(seed * 13);
       let steps = 0;
-      while (s.day <= 45 && !s.dead && steps < 20000) {
+      while (s.day <= 95 && !s.dead && steps < 60000) {
         step(s, r);
         steps++;
       }
-      expect(steps).toBeLessThan(20000);
+      expect(steps).toBeLessThan(60000);
       const show = (k: keyof GameState['stats']) => s.stats[k].toFixed(1);
       console.log(
         `seed ${seed}: day ${s.day} dead=${!!s.dead} rank=${s.rank} money=${s.money} sword_p=${show('sword_p')} str=${show('str')} end=${show('end')} magic_p=${show('magic_p')} quests=${s.counters.questDone ?? 0} seen=${Object.keys(s.seen).length}`,
       );
+      if (!s.dead) {
+        expect(s.seen.great_tide).toBeDefined();
+        expect(s.seen.epilogue).toBeDefined();
+      }
+      console.log(`  tide: choice=${s.flags.tideChoice} prep=${['guildPrepared','garrisonPrepared','ruleAdopted','seraGaradReconciled'].filter((k) => s.flags[k]).join(',')} village=${s.flags.villageSaved} heavy=${s.flags.gateHeavy} garadDied=${!!s.flags.garadDied} lyneLeft=${!!s.flags.lyneLeft} events=${Object.keys(s.seen).length}`);
       for (const k of Object.keys(s.stats)) expect(Number.isFinite(s.stats[k as keyof typeof s.stats])).toBe(true);
     });
   }
