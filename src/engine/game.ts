@@ -2,11 +2,12 @@
 import type { GameState, Line, StatKey } from './types';
 import type { ActivityDef, ChoiceDef, EventDef, MethodDef, NodeDef } from './defs';
 import { R } from './registry';
-import { chance, weighted } from './rng';
+import { chance, rand, weighted } from './rng';
 import { fmt, resolveLines } from './text';
 import { consolidate, markRepetition, rust } from './growth';
 import { ALL_STATS, band, clamp } from './stats';
 import { playerMove, type PlayerMove } from './combat';
+import { weeklyAffiliations } from './affil';
 import { BREAKTHROUGH, RISE } from '../content/selftext';
 
 // ───────── 表示用 ─────────
@@ -40,6 +41,7 @@ export function startEvent(s: GameState, id: string, nodeId?: string) {
   const ev = R.events.get(id);
   if (!ev) throw new Error(`unknown event ${id}`);
   s.seen[id] = s.day;
+  if (ev.trigger !== 'manual') s.counters.eventsFired = (s.counters.eventsFired ?? 0) + 1;
   enterNode(s, ev, nodeId ?? ev.start ?? 'start');
 }
 
@@ -115,10 +117,21 @@ export function findEvent(s: GameState, trigger: EventDef['trigger']): EventDef 
   }
   if (!cands.length) return undefined;
   const top = Math.max(...cands.map((e) => e.priority ?? 0));
-  const pool = cands.filter((e) => (e.priority ?? 0) === top);
-  // 優先度の低い（日常の）イベントは、毎回は起きない
-  if (top < 10 && !chance(s, trigger === 'after' ? 0.35 : 0.3)) return undefined;
-  return weighted(s, pool.map((e) => ({ w: e.weight ?? 1, v: e })));
+  if (top >= 10) {
+    const pool = cands.filter((e) => (e.priority ?? 0) === top);
+    s.counters.quiet = 0;
+    return weighted(s, pool.map((e) => ({ w: e.weight ?? 1, v: e })));
+  }
+  // 日常の小さな出来事：しばらく何も起きていないほど起きやすくなる
+  const quiet = s.counters.quiet ?? 0;
+  const p = Math.min(0.85, (trigger === 'after' ? 0.3 : 0.2) + quiet * 0.15);
+  if (!chance(s, p)) return undefined;
+  s.counters.quiet = 0;
+  // まだ見ていない出来事を優先する
+  return weighted(
+    s,
+    cands.map((e) => ({ w: (e.weight ?? 1) * (1 + (e.priority ?? 0) * 0.5) * (s.seen[e.id] === undefined ? 2.5 : 1), v: e })),
+  );
 }
 
 /** 新しく始めたゲームの最初の時間帯を開始する */
@@ -127,7 +140,7 @@ export function beginGame(s: GameState) {
 }
 
 function checkSlotEvents(s: GameState) {
-  if (s.scene || s.combat || s.dead || s.ended) return;
+  if (s.scene || s.combat || s.dead || s.ended || s.explore) return;
   const ev = findEvent(s, 'slot');
   if (ev) startEvent(s, ev.id);
 }
@@ -137,6 +150,7 @@ function checkSlotEvents(s: GameState) {
 export function advance(s: GameState, slots = 1) {
   for (let i = 0; i < slots; i++) {
     s.slot += 1;
+    s.counters.quiet = (s.counters.quiet ?? 0) + 1;
     if (s.slot > 3) endDay(s);
     if (i < slots - 1) {
       const ev = findInterrupt(s);
@@ -190,6 +204,12 @@ export function endDay(s: GameState) {
   if (s.money >= LIVING_COST) {
     s.money -= LIVING_COST;
     s.cond.fed = true;
+  } else if (s.npcs.marta?.met && s.npcs.marta.rel.trust >= 4 && (s.counters.tab ?? 0) < 80) {
+    // マルタが宿代を待ってくれる（ツケ）
+    s.counters.tab = (s.counters.tab ?? 0) + LIVING_COST;
+    s.cond.fed = true;
+    q -= 0.05;
+    notes.push((s.counters.tab ?? 0) <= LIVING_COST ? '宿代が払えないと言うと、マルタは黙ってカウンターの下の帳面に{I}の名前を書いた。「稼げるようになったら返しな」' : 'マルタは何も言わずに、帳面の{I}の名前の横に数字を書き足した。');
   } else {
     q -= 0.3;
     s.cond.fed = false;
@@ -219,8 +239,11 @@ export function endDay(s: GameState) {
     s.quest = null;
   }
 
+  // 週の終わり：所属の清算
+  if (s.day % 7 === 0) notes.push(...weeklyAffiliations(s));
+
   const perceived = perceptionLines(before, s);
-  const text = [...s.today, ...notes];
+  const text = [...s.today, ...notes.map((t) => fmt(s, t))];
   for (const p of perceived) text.push(p);
   for (const ins of insights) {
     text.push(BREAKTHROUGH[ins.skill]);
@@ -273,21 +296,33 @@ export function methodsOf(s: GameState, a: ActivityDef): MethodDef[] {
   return [...a.methods, ...(a.dynamic?.(s) ?? [])].filter((m) => !m.cond || m.cond(s));
 }
 
-export function doAction(s: GameState, activityId: string, methodId: string, ctx: { focus?: string; companion?: string } = {}) {
+/** 鍛錬・学習にあたる活動（好調や追い込みの対象） */
+export const TRAINING_ACTS = new Set(['sword', 'body', 'bow', 'magic', 'selftrain', 'library', 'study', 'aff_institute']);
+
+export function doAction(s: GameState, activityId: string, methodId: string, ctx: { focus?: string; companion?: string; push?: boolean } = {}) {
   const a = R.activities.find((x) => x.id === activityId);
   const m = a && methodsOf(s, a).find((x) => x.id === methodId);
   if (!a || !m) return;
   s.location = a.loc;
   const key = `${a.id}:${m.id}${ctx.focus ? ':' + ctx.focus : ''}`;
   s.lastAction = key;
+  s.flags._lastDo = JSON.stringify({ a: activityId, m: methodId, f: ctx.focus ?? '', c: ctx.companion ?? '' });
   s.counters[`act:${a.id}`] = (s.counters[`act:${a.id}`] ?? 0) + (m.slots ?? 1);
-  const lines = m.run(s, ctx).map((l) => ({ who: l.who, text: fmt(s, l.text) }));
+  const sceneBefore = s.scene;
+  const pendingBefore = { ...s.pending };
+  const lines: Line[] = m.run(s, ctx).map((l) => ({ who: l.who, text: fmt(s, l.text), tone: l.tone }));
+  if (TRAINING_ACTS.has(a.id) && (m.slots ?? 1) > 0) trainingTwist(s, pendingBefore, lines, !!ctx.push);
   markRepetition(s, key);
   const ev = s.flags._start as string | undefined;
   if (ev) {
     // 行動がイベント（依頼への出発など）を開始する場合
     delete s.flags._start;
     startEvent(s, ev);
+    return;
+  }
+  // 行動が探索や戦闘、イベントを始めた場合は、結果の文を挟まない
+  if (s.explore || s.combat || s.scene !== sceneBefore) {
+    if (m.late && s.slot === 3) s.flags._late = true;
     return;
   }
   if (m.late && s.slot === 3) s.flags._late = true;
@@ -336,4 +371,51 @@ export function die(s: GameState, cause: string) {
   s.flags.deathCause = cause;
   s.scene = null;
   s.combat = null;
+}
+
+/** 直前と同じ行動を、もう一度行えるか */
+export function repeatable(s: GameState): { a: string; m: string; f?: string; c?: string } | null {
+  const raw = s.flags._lastDo as string | undefined;
+  if (!raw) return null;
+  const d = JSON.parse(raw) as { a: string; m: string; f: string; c: string };
+  const act = R.activities.find((x) => x.id === d.a);
+  if (!act || !locationOpen(s, act.loc) || (act.cond && !act.cond(s))) return null;
+  const m = methodsOf(s, act).find((x) => x.id === d.m);
+  if (!m || (m.slots ?? 1) === 0) return null;
+  if (d.c && !availableCompanions(s, act.loc).includes(d.c)) d.c = '';
+  return { a: d.a, m: d.m, f: d.f || undefined, c: d.c || undefined };
+}
+
+/** 鍛錬のゆらぎ：ときどき訪れる「好調」と、自分で選ぶ「追い込み」 */
+function trainingTwist(s: GameState, before: Partial<Record<StatKey, number>>, lines: Line[], push: boolean) {
+  let mult = 0;
+  if (push) {
+    mult += 0.7;
+    s.cond.fatigue = clamp(s.cond.fatigue + 12, 0, 100);
+    const risk = 0.12 + (s.cond.fatigue > 60 ? 0.2 : 0);
+    lines.push({ text: '限界まで、自分を追い込んだ。息が上がり、視界の端が白くなる。' });
+    if (chance(s, risk)) {
+      s.cond.injuries.push({ id: `push${s.day}-${s.slot}`, label: '無理がたたった脚の筋', severity: 1, days: 4 });
+      lines.push({ text: '最後の一本で、脚に鋭い痛みが走った。やりすぎた。', tone: 'bad' });
+      log(s, '鍛錬で無理をして、脚を痛めた。');
+      mult -= 0.4;
+    }
+  }
+  const goodP = 0.12 + (s.cond.stress < 25 ? 0.05 : 0) - (s.cond.fatigue > 70 ? 0.08 : 0);
+  if (chance(s, goodP)) {
+    mult += 0.8;
+    s.counters.goodDays = (s.counters.goodDays ?? 0) + 1;
+    const t = [
+      '今日は、体が驚くほどよく動いた。いつもは届かない何かに、指先がかかった気がする。',
+      'ふとした瞬間、頭の中の霧が晴れた。昨日まで分からなかったことが、急に腑に落ちた。',
+      '何もかもが噛み合う日だった。集中が途切れない。時間が経つのを忘れていた。',
+    ];
+    lines.push({ text: t[Math.floor(rand(s) * t.length)], tone: 'good' });
+    log(s, '鍛錬で、いつにない手応えがあった。');
+  }
+  if (mult === 0) return;
+  for (const [k, v] of Object.entries(s.pending) as [StatKey, number][]) {
+    const d = v - (before[k] ?? 0);
+    if (d > 0) s.pending[k] = v + d * mult;
+  }
 }

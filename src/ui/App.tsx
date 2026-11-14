@@ -4,6 +4,8 @@ import { deleteAll, loadCurrent, loadDayStart, saveCurrent, saveDayStart } from 
 import { Title } from './Title';
 import { Create } from './Create';
 import { Game } from './Game';
+import { migrate } from '../engine/creation';
+import { NPC_IDS } from '../content';
 
 type Screen = 'loading' | 'title' | 'create' | 'game';
 
@@ -20,6 +22,7 @@ export function App() {
   }, []);
 
   const commit = (s: GameState) => {
+    migrate(s, NPC_IDS);
     if (s.flags._newDay) {
       delete s.flags._newDay;
       if (!s.scene && !s.combat) void saveDayStart(s);
@@ -48,7 +51,7 @@ export function App() {
         onContinue={async () => {
           const s = await loadCurrent();
           if (s) {
-            setState(s);
+            setState(migrate(s, NPC_IDS));
             setScreen('game');
           }
         }}

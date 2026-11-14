@@ -408,7 +408,7 @@ const inn: ActivityDef[] = [
 
 // ───────── 市場 ─────────
 
-const SHOP = ['bread', 'salve', 'book_sword', 'book_beast', 'book_herb', 'ironsword'];
+const SHOP = ['bread', 'torch', 'salve', 'book_sword', 'book_beast', 'book_herb', 'ironsword'];
 
 const market: ActivityDef[] = [
   {
@@ -418,7 +418,7 @@ const market: ActivityDef[] = [
     methods: [],
     dynamic: (s) =>
       SHOP.map((id) => R.items.get(id)!)
-        .filter((it) => !(it.id.startsWith('book_') && s.items[it.id]) && !(it.id === 'ironsword' && s.items.ironsword))
+        .filter((it) => !(it.id.startsWith('book_') && s.items[it.id]) && !(it.id === 'ironsword' && s.items.ironsword) && !(it.id === 'torch' && !s.flags.aqueductOpen))
         .map<MethodDef>((it) => ({
           id: `buy:${it.id}`,
           label: `${it.name}（${it.price}銅貨）`,
@@ -643,6 +643,8 @@ const gate: ActivityDef[] = [
         desc: '森の浅いところで薬草を探す。魔物に出くわすこともある。',
         slots: 2,
         companions: true,
+        warn: (s, { companion }) =>
+          (s.counters.rescued ?? 0) >= 1 && !companion ? '一度、助けられている。一人で倒れたら、次は誰も来ないかもしれない。' : null,
         run: (s, { companion }) => {
           gain(s, 'herb_p', 1.4, { difficulty: 20, key: 'herb:gather' });
           gain(s, 'survival_p', 1.0, { difficulty: 20, key: 'survival:gather' });
@@ -671,6 +673,8 @@ const gate: ActivityDef[] = [
         cond: (s) => s.rank >= 1,
         slots: 2,
         companions: true,
+        warn: (s, { companion }) =>
+          (s.counters.rescued ?? 0) >= 1 && !companion ? '一度、助けられている。一人で倒れたら、次は誰も来ないかもしれない。' : null,
         run: (s, { companion }) => {
           gain(s, 'survival_p', 1.2, { difficulty: 24, key: 'survival:hunt' });
           tire(s, 14);

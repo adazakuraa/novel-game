@@ -1,6 +1,7 @@
 import { useRef, useState } from 'preact/hooks';
 import type { GameState } from '../engine/types';
 import { importJson } from '../engine/save';
+import { CHAPTERS, GAME_VERSION } from '../content/meta';
 
 export function Title(p: { hasSave: boolean; onContinue: () => void; onNew: () => void; onImport: (s: GameState) => void }) {
   const file = useRef<HTMLInputElement>(null);
@@ -10,7 +11,14 @@ export function Title(p: { hasSave: boolean; onContinue: () => void; onNew: () =
       <div class="title-mark">
         <p class="title-sub">辺境都市カルナス</p>
         <h1>灰縁の灯</h1>
-        <p class="title-sub">第1章　澱潮の春</p>
+      </div>
+      <div class="title-status">
+        {CHAPTERS.map((c) => (
+          <p>
+            {c.title}　<span class={c.status === '完結' ? 'done' : 'wip'}>{c.status}</span>
+          </p>
+        ))}
+        <p class="ver">{GAME_VERSION}　開発中</p>
       </div>
       <div class="title-menu">
         {p.hasSave && (

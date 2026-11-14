@@ -6,6 +6,8 @@ import {
   activitiesAt,
   advance,
   availableCompanions,
+  repeatable,
+  TRAINING_ACTS,
   choose,
   combatAct,
   doAction,
@@ -22,6 +24,10 @@ import { SLOT_NAMES, dateLabel, fmt } from '../engine/text';
 import { band } from '../engine/stats';
 import { exportJson, loadSlot, saveSlot } from '../engine/save';
 import { SELF } from '../content/selftext';
+import { searchActions, type SearchHit } from '../engine/search';
+import { act as actHere, currentNode, exitDungeon, linkOpen, move, nodeLines, search as searchHere, torchWords } from '../engine/explore';
+import { affiliationList } from '../engine/affil';
+import { concerns } from '../content/concerns';
 
 type Tab = 'act' | 'journal' | 'people' | 'items' | 'system';
 
@@ -55,7 +61,7 @@ function condWords(s: GameState): string[] {
 export function Game(p: Props) {
   const [tab, setTab] = useState<Tab>('act');
   const s = p.state;
-  const busy = !!s.scene || !!s.combat;
+  const busy = !!s.scene || !!s.combat || !!s.explore;
 
   useEffect(() => {
     if (busy) setTab('act');
@@ -83,6 +89,8 @@ export function Game(p: Props) {
             <Combat s={s} update={p.update} />
           ) : s.scene ? (
             <Scene s={s} update={p.update} />
+          ) : s.explore ? (
+            <Explore s={s} update={p.update} />
           ) : (
             <Planner s={s} update={p.update} />
           )
@@ -129,7 +137,7 @@ function Lines({ lines }: { lines: Line[] }) {
             <span class="say">「{l.text}」</span>
           </p>
         ) : (
-          <p>{l.text}</p>
+          <p class={l.tone ?? ''}>{l.text}</p>
         ),
       )}
     </div>
@@ -156,6 +164,21 @@ function Scene({ s, update }: { s: GameState; update: Props['update'] }) {
             続ける
           </button>
         )}
+        {v.canContinue && s.scene?.kind === 'inline' && s.scene.then === 'advance' && s.scene.slots !== 0 && s.slot < 3 && repeatable(s) && (
+          <button
+            class="btn ghost"
+            onClick={() =>
+              update((st) => {
+                proceed(st);
+                if (st.scene || st.combat || st.explore) return;
+                const r = repeatable(st);
+                if (r) doAction(st, r.a, r.m, { focus: r.f, companion: r.c });
+              })
+            }
+          >
+            続けて、同じことをする
+          </button>
+        )}
       </div>
     </div>
   );
@@ -174,9 +197,7 @@ function Combat({ s, update }: { s: GameState; update: Props['update'] }) {
         <span class="dist">{distName(c.dist)}</span>
       </div>
       <div class="novel">
-        {c.log.map((l) => (
-          <p>{l}</p>
-        ))}
+        {c.log.map((l) => (l.startsWith('【会心】') ? <p class="good crit">{l.slice(4)}</p> : <p>{l}</p>))}
         <p class="enemy-state">{enemyStateText(s)}</p>
         <p class="tell">{tell.text}</p>
         {tell.read && <p class="read">――{tell.read}</p>}
@@ -188,6 +209,60 @@ function Combat({ s, update }: { s: GameState; update: Props['update'] }) {
             {m.label}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ───────── 探索 ─────────
+
+function Explore({ s, update }: { s: GameState; update: Props['update'] }) {
+  const [msg, setMsg] = useState('');
+  const ex = s.explore!;
+  const nd = currentNode(s);
+  const d = R.dungeons.get(ex.dungeon)!;
+  return (
+    <div class="explore">
+      <div class="combat-head">
+        <span class="enemy-name">{nd.name}</span>
+        <span class="dist">{d.name}</span>
+      </div>
+      <Lines lines={nodeLines(s)} />
+      {msg && <p class="notice">{msg}</p>}
+      <p class="muted small">{torchWords(s)}</p>
+      <div class="moves">
+        {nd.links.map((l) => {
+          const ok = linkOpen(s, l);
+          return (
+            <button
+              class="choice"
+              disabled={!ok}
+              onClick={() => {
+                setMsg('');
+                update((st) => move(st, l.to));
+              }}
+            >
+              {l.label}
+              {!ex.visited.includes(l.to) && ok ? '（未踏）' : ''}
+              {!ok && l.blocked ? <span class="method-desc">　{l.blocked}</span> : null}
+            </button>
+          );
+        })}
+        {nd.action && (!nd.action.cond || nd.action.cond(s)) && (
+          <button class="choice" onClick={() => update((st) => actHere(st))}>
+            {nd.action.label}
+          </button>
+        )}
+        {!ex.searched.includes(ex.node) && (
+          <button class="choice" onClick={() => update((st) => setMsg(searchHere(st)))}>
+            辺りを調べる
+          </button>
+        )}
+        {nd.exit && (
+          <button class="choice flee" onClick={() => update((st) => exitDungeon(st))}>
+            地上へ戻る
+          </button>
+        )}
       </div>
     </div>
   );
@@ -205,6 +280,8 @@ function Planner({ s, update }: { s: GameState; update: Props['update'] }) {
 
   return (
     <div class="planner">
+      <FreeInput s={s} update={update} />
+      <Concerns s={s} />
       <div class="locs">
         {locs.map((l) => {
           const o = locationOpen(s, l.id);
@@ -252,11 +329,68 @@ function Planner({ s, update }: { s: GameState; update: Props['update'] }) {
   );
 }
 
+function Concerns({ s }: { s: GameState }) {
+  const list = concerns(s);
+  if (!list.length) return null;
+  return (
+    <div class="concerns">
+      <span class="sub-label">気になっていること</span>
+      <ul>
+        {list.map((t) => (
+          <li>{t}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function FreeInput({ s, update }: { s: GameState; update: Props['update'] }) {
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
+  const run = (h: SearchHit) => {
+    setQ('');
+    setHits(null);
+    update((st) => {
+      moveTo(st, h.loc);
+      if (h.kind === 'talk') talkTo(st, h.npc!);
+      else doAction(st, h.activity!, h.method!, { focus: h.focus, companion: h.companion });
+    });
+  };
+  return (
+    <form
+      class="free"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setHits(searchActions(s, q));
+      }}
+    >
+      <div class="free-row">
+        <input value={q} placeholder="したいことを書く（例：リーネと模擬戦）" onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
+        <button class="btn small" type="submit">
+          探す
+        </button>
+      </div>
+      {hits && (
+        <div class="free-hits">
+          {hits.length === 0 && <p class="muted small">それに近い行動は思いつかなかった。言い方を変えるか、下の一覧から選んでみよう。</p>}
+          {hits.map((h) => (
+            <button type="button" class="method" disabled={!!h.blocked} onClick={() => run(h)}>
+              <span class="method-label">{h.label}</span>
+              {h.blocked && <span class="method-desc">{h.blocked}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </form>
+  );
+}
+
 function Activity({ s, a, open, toggle, update }: { s: GameState; a: ActivityDef; open: boolean; toggle: () => void; update: Props['update'] }) {
   const methods = methodsOf(s, a);
   const [method, setMethod] = useState<string | null>(null);
   const [focus, setFocus] = useState<string | undefined>(undefined);
   const [comp, setComp] = useState<string | undefined>(undefined);
+  const [push, setPush] = useState(false);
   const m: MethodDef | undefined = methods.find((x) => x.id === method);
   const focuses = m?.focuses?.filter((f) => !f.cond || f.cond(s)) ?? [];
   const companions = m?.companions ? availableCompanions(s, a.loc).map((id) => R.npcs.get(id)!) : [];
@@ -309,8 +443,15 @@ function Activity({ s, a, open, toggle, update }: { s: GameState; a: ActivityDef
               </div>
             </div>
           )}
+          {m && TRAINING_ACTS.has(a.id) && (m.slots ?? 1) > 0 && (
+            <label class="push">
+              <input type="checkbox" checked={push} onChange={(e) => setPush((e.target as HTMLInputElement).checked)} />
+              限界まで追い込む（伸びは大きいが、疲れ、怪我をしやすい）
+            </label>
+          )}
+          {m?.warn?.(s, { companion: comp }) && <p class="method-warn">{m.warn(s, { companion: comp })}</p>}
           {m && (
-            <button class="btn primary do" onClick={() => update((st) => doAction(st, a.id, m.id, { focus, companion: comp }))}>
+            <button class="btn primary do" onClick={() => update((st) => doAction(st, a.id, m.id, { focus, companion: comp, push }))}>
               {(m.slots ?? 1) === 0 ? '行う' : (m.slots ?? 1) > 1 ? `行う（${m.slots}つの時間帯）` : '行う'}
             </button>
           )}
@@ -377,9 +518,21 @@ function Journal({ s }: { s: GameState }) {
 
 function People({ s }: { s: GameState }) {
   const met = [...R.npcs.values()].filter((n) => s.npcs[n.id]?.met);
+  const affs = affiliationList(s);
   if (met.length === 0) return <p class="muted">まだ誰とも知り合っていない。</p>;
   return (
     <div class="people">
+      {affs.length > 0 && (
+        <div class="person-card">
+          <strong>所属</strong>
+          {affs.map(({ def, state }) => (
+            <p>
+              {def.name}：{def.dutyPerWeek > 0 ? `週に${def.dutyPerWeek}回の${def.dutyLabel}（今週${state.duty}回）` : '義務なし'}
+              {def.pay > 0 ? `、週給${def.pay}銅貨` : ''}
+            </p>
+          ))}
+        </div>
+      )}
       {met.map((n) => {
         const st = s.npcs[n.id];
         return (

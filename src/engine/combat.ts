@@ -101,8 +101,9 @@ export function heroState(s: GameState): string {
   const hp = s.cond.hp;
   if (hp > 75) return 'まだ体は軽い。';
   if (hp > 50) return '息が上がり、あちこちが痛む。';
-  if (hp > 25) return '傷が熱い。動きが鈍っているのが自分でもわかる。';
-  return '視界の端が暗い。これ以上はまずい。';
+  const alone = s.combat?.loseMeansDeath ? 'ここで倒れたら、助けは来ない。' : '';
+  if (hp > 25) return '傷が熱い。動きが鈍っているのが自分でもわかる。' + (alone && hp < 40 ? alone : '');
+  return '視界の端が暗い。これ以上はまずい。' + alone;
 }
 
 export function availableMoves(s: GameState): { id: PlayerMove; label: string }[] {
@@ -124,8 +125,10 @@ export function availableMoves(s: GameState): { id: PlayerMove; label: string }[
 }
 
 function weaponBonus(s: GameState) {
-  if (s.items.ironsword) return 7;
-  if (s.items.oldsword) return 3;
+  const sharp = (s.flags.sharpUntil as number | undefined) ?? 0;
+  const edge = s.day <= sharp ? 1.5 : 0;
+  if (s.items.ironsword) return 7 + edge;
+  if (s.items.oldsword) return 3 + edge;
   return 0;
 }
 
@@ -201,8 +204,13 @@ export function playerMove(s: GameState, move: PlayerMove): CombatResult {
       if (it.type === 'reposition') log.push('相手は動き続けていて、狙いが定まらない。');
       const bonus = (lunge ? -0.12 : 0) + (it.type === 'reposition' ? -0.15 : 0) + (it.type === 'retreat' || it.type === 'call' ? 0.15 : 0);
       if (heroHit(s, c, bonus)) {
-        heroDealt = heroDamage(s, c, it.type === 'call' ? 1.2 : 1);
-        log.push(lunge ? '踏み込みざまに剣を振るう。手応えがあった。' : '振り下ろした剣が、確かに相手を捉えた。');
+        // 会心：予兆を読み切っているほど、また有利な体勢ほど出やすい
+        const crit = chance(s, 0.08 + (lv === 2 ? 0.1 : 0) + Math.max(0, c.edge) * 0.08);
+        heroDealt = heroDamage(s, c, (it.type === 'call' ? 1.2 : 1) * (crit ? 1.8 : 1));
+        if (crit) {
+          log.push('【会心】刃が、吸い込まれるように急所へ入った。腕に、骨まで響く確かな手応え。');
+          s.counters.crits = (s.counters.crits ?? 0) + 1;
+        } else log.push(lunge ? '踏み込みざまに剣を振るう。手応えがあった。' : '振り下ろした剣が、確かに相手を捉えた。');
       } else {
         log.push(lunge ? '踏み込んだが、刃は空を切った。' : '剣は相手をかすめただけだった。');
       }
@@ -355,7 +363,12 @@ export function playerMove(s: GameState, move: PlayerMove): CombatResult {
     for (const l of e.loot ?? []) if (chance(s, l.chance)) s.items[l.item] = (s.items[l.item] ?? 0) + 1;
     return 'win';
   }
-  if (s.cond.hp <= 0) return 'lose';
+  if (s.cond.hp <= 0 && c.loseMeansDeath && !c.lastStand) {
+    // 理不尽な即死を避ける：一度だけ踏みとどまり、はっきりと警告する
+    c.lastStand = true;
+    s.cond.hp = 1;
+    log.push('膝が崩れかけた。……次の一撃を受けたら、終わる。');
+  } else if (s.cond.hp <= 0) return 'lose';
   const ratio = c.enemyHp / c.enemyMaxHp;
   if (e.fleeAt && ratio < e.fleeAt && chance(s, 0.35)) {
     log.push(`${e.name}は身を翻し、逃げていった。`);

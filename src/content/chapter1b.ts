@@ -348,6 +348,7 @@ const warnGuild: EventDef = {
             ? [n('事情を話すと、セラは黙って立ち上がり、奥の扉を叩いてくれた。'), say('sera', '支部長。……聞いていただきたい話があります。')]
             : [say('sera', '支部長との面会ですか。……ご用件を伺っても？'), n('長い説明の後、セラはしぶしぶ奥へ取り次いだ。')],
         n('支部長のボルドは、太い指で机を叩きながら、ノインの数字の並んだ紙を眺めていた。'),
+        (s) => (s.flags.edgarNoin ? [n('紙の束の中には、エドガーの魔核の記録も挟まっていた。ベルク商会の帳場の数字だ。ボルドの指が、その頁で止まった。')] : null),
         say('ボルド', '倍、ねえ。七年前の倍の魔物が来ると。それで、俺に何をしろと？'),
         say('ボルド', '冒険者を森から引き上げさせろってのか。潮の時期は魔核の書き入れどきだ。商会が黙っちゃいない。'),
       ],
@@ -361,7 +362,7 @@ const warnGuild: EventDef = {
       lines: [],
       next: (s) => {
         const score =
-          num(s, 'prediction') * 10 + s.npcs.sera.rel.trust * 0.4 + (s.counters.questDone ?? 0) * 3 + (s.flags.supportDraft ? 5 : 0) + s.rank * 5 + s.stats.speech * 0.4 + num(s, '_warnBonus');
+          num(s, 'prediction') * 10 + s.npcs.sera.rel.trust * 0.4 + (s.counters.questDone ?? 0) * 3 + (s.flags.supportDraft ? 5 : 0) + s.rank * 5 + s.stats.speech * 0.4 + num(s, '_warnBonus') + (s.flags.edgarNoin ? 8 : 0);
         delete s.flags._warnBonus;
         return score >= 42 ? 'yes' : 'no';
       },
@@ -1268,6 +1269,15 @@ function epilogueLines(s: GameState): Line[] {
   // ノイン
   if (s.flags.knowNode) out.push(n('ノインは、カルナスの地下に眠る灯脈の節について、王都への報告書を書いている。分室の壁の紙は、また増えた。'), n('「この街の下に、何があるのか。たぶん、まだ誰も知らないことが山ほどある」ノインはそう言って、楽しそうに笑った。'));
   else if (s.npcs.noin.met) out.push(n('ノインは、潮計の改良に取りかかっている。次の潮までに、もっと正確な答えを出すのだと言って。'));
+
+  // マルタ
+  if ((s.counters.tab ?? 0) > 0) out.push(n('灯り亭のツケ帳には、まだ{I}の名前が残っている。マルタは「いつでもいいよ」と言うけれど。'));
+  else if (s.counters.tabPaid) out.push(n('灯り亭のツケ帳の{I}の名前の横には、丸が一つついている。マルタはときどきその頁を開いて、満足そうに眺めているらしい。'));
+  if (s.flags.martaDebt) out.push(n(s.flags.martaKnowsEdgar ? '灯り亭の家賃の件は、まだ片づいていない。それでもマルタは、エドガーが来るたびに煮込みを大盛りにしている。' : '灯り亭の家賃の件は、まだ片づいていない。マルタは「なんとかするさ」と笑っている。'));
+
+  // エドガー
+  if (s.flags.edgarNoin) out.push(n('エドガーは、商会の仕事の合間に分室へ通っている。ノインと二人、魔核の大きさと力の関係を、一枚の表にまとめようとしているらしい。'));
+  else if (s.npcs.edgar?.met) out.push(n('エドガーは今日も、商会の帳場で数字と睨み合っている。'));
 
   out.push(n('東の城壁の向こうで、灰縁の森は静かに霞をまとっている。'));
   out.push(n('――第1章　澱潮の春　完'));

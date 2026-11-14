@@ -53,6 +53,7 @@ export interface NpcState {
 export interface Line {
   who?: string; // 話者（NPC id か表示名）。未指定は地の文
   text: string;
+  tone?: 'good' | 'bad'; // 強調（好調・会心・怪我など）
 }
 
 export interface JournalEntry {
@@ -79,6 +80,7 @@ export interface CombatState {
   onFlee: SceneRef;
   loseMeansDeath: boolean;
   spar?: boolean; // 稽古試合（負けても大怪我しない）
+  lastStand?: boolean; // 死の手前で一度だけ踏みとどまった
   fled?: boolean;
 }
 
@@ -97,6 +99,23 @@ export interface QuestState {
   deadline: number;
   stage: number;
   data: Record<string, number | string | boolean>;
+}
+
+export interface AffState {
+  joined: number; // 加入した日
+  standing: number; // 組織内での評価
+  duty: number; // 今週こなした義務（時間帯の数）
+  missed: number; // 義務を果たせなかった週の数（連続）
+}
+
+export interface ExploreState {
+  dungeon: string;
+  node: string;
+  torch: number; // 松明の残り（移動ごとに減る）
+  visited: string[];
+  searched: string[];
+  moves: number;
+  companion?: string;
 }
 
 export interface GameState {
@@ -133,6 +152,8 @@ export interface GameState {
   scene: SceneState | null;
   combat: CombatState | null;
   quest: QuestState | null;
+  affil?: Record<string, AffState>; // 所属（後から追加された項目のため省略可）
+  explore?: ExploreState | null;
   lastAction?: string;
   dead?: boolean;
   ended?: boolean;

@@ -567,3 +567,98 @@ input {
   gap: 12px;
   padding-top: 20vh;
 }
+
+/* ───── 自由入力 ───── */
+.free {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.free-row {
+  display: flex;
+  gap: 8px;
+}
+.free-row input {
+  flex: 1;
+  min-width: 0;
+}
+.free-hits {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.method-warn {
+  font-size: 0.8rem;
+  color: var(--tell);
+}
+
+.title-status {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.7;
+  margin-top: -24px;
+}
+.title-status p {
+  margin: 0;
+}
+.title-status .done {
+  color: var(--read);
+}
+.title-status .wip {
+  color: var(--accent);
+}
+.title-status .ver {
+  font-size: 0.7rem;
+  opacity: 0.8;
+  margin-top: 4px;
+}
+
+/* ───── 手応え・気がかり ───── */
+.novel p.good {
+  color: var(--accent);
+  font-weight: 600;
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+}
+.novel p.bad {
+  color: var(--tell);
+}
+.novel p.crit {
+  font-size: 1.12rem;
+  animation: pop 0.35s ease-out;
+}
+@keyframes pop {
+  0% { transform: scale(0.96); opacity: 0.4; }
+  60% { transform: scale(1.03); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.concerns {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.concerns ul {
+  margin: 4px 0 0;
+  padding-left: 1.1em;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+.push {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.push input {
+  width: auto;
+}
+.scene,
+.combat,
+.explore {
+  scroll-margin-top: 90px;
+}
