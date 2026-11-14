@@ -12,6 +12,7 @@ import { ENEMIES_1B, EVENTS_1B, QUEST_RUIN, extendNpcs } from './chapter1b';
 import { ACTIVITIES2, EVENTS2, NPCS2 } from './npcs2';
 import { ACTIVITIES_2, EVENTS_CH2, NPCS_CH2, registerCh2 } from './chapter2';
 import { GIFT_REACTIONS, MARTA_GRAVE_TOPICS, STORYLETS } from './storylets';
+import { AMBITION_EVENTS, EXAM_ACTIVITY, registerAmbitions } from './ambitions';
 import { remember } from '../engine/npc';
 
 const ALL_NPCS = [...NPCS, ...NPCS2, ...NPCS_CH2];
@@ -100,13 +101,15 @@ export function loadContent() {
   for (const npc of ALL_NPCS) R.npcs.set(npc.id, npc);
   registerCh2();
   R.npcs.get('marta')?.topics.push(...MARTA_GRAVE_TOPICS);
-  R.activities.push(QUEST_ACTIVITY, CORE_ACTIVITY, TEST_ACTIVITY, ...ACTIVITIES, ...ACTIVITIES2, ...ACTIVITIES_2);
+  registerAmbitions(R);
+  R.activities.push(EXAM_ACTIVITY, QUEST_ACTIVITY, CORE_ACTIVITY, TEST_ACTIVITY, ...ACTIVITIES, ...ACTIVITIES2, ...ACTIVITIES_2);
   registerEvents(EVENTS);
   registerEvents(QUEST_EVENTS);
   registerEvents(EVENTS_1B);
   registerEvents(EVENTS2);
   registerEvents(EVENTS_CH2);
   registerEvents(STORYLETS);
+  registerEvents(AMBITION_EVENTS);
   registerEvents(ALL_NPCS.map((n2) => buildTalkEvent(n2.id)));
 }
 

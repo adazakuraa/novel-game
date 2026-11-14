@@ -242,6 +242,10 @@ export function endDay(s: GameState) {
   // 週の終わり：所属の清算
   if (s.day % 7 === 0) notes.push(...weeklyAffiliations(s));
 
+  for (const h of R.progressHooks) notes.push(...h(s));
+  const view = (s.flags.statView as string | undefined) ?? 'stage';
+  if (view !== 'hidden') notes.push(...visibleGrowth(before, s, view === 'number'));
+
   const perceived = perceptionLines(before, s);
   const text = [...s.today, ...notes.map((t) => fmt(s, t))];
   for (const p of perceived) text.push(p);
@@ -312,6 +316,7 @@ export function doAction(s: GameState, activityId: string, methodId: string, ctx
   const pendingBefore = { ...s.pending };
   const lines: Line[] = m.run(s, ctx).map((l) => ({ who: l.who, text: fmt(s, l.text), tone: l.tone }));
   if (TRAINING_ACTS.has(a.id) && (m.slots ?? 1) > 0) trainingTwist(s, pendingBefore, lines, !!ctx.push);
+  for (const h of R.progressHooks) for (const t of h(s)) lines.push({ text: fmt(s, t), tone: 'good' });
   markRepetition(s, key);
   const ev = s.flags._start as string | undefined;
   if (ev) {
@@ -419,3 +424,28 @@ function trainingTwist(s: GameState, before: Partial<Record<StatKey, number>>, l
     if (d > 0) s.pending[k] = v + d * mult;
   }
 }
+
+const STAGE = ['未熟', '見習い', '駆け出し', '一人前', '熟練', '達人'];
+
+/** 成長を見える形で日誌に書く（表示設定が「段階」か「数値」のとき） */
+function visibleGrowth(before: Record<StatKey, number>, s: GameState, numbers: boolean): string[] {
+  const deltas = ALL_STATS.map((k) => ({ k, d: s.stats[k] - before[k] })).filter((x) => x.d > 0.05);
+  if (!deltas.length) return [];
+  const out: string[] = [];
+  for (const { k } of deltas) {
+    const b0 = band(before[k]);
+    const b1 = band(s.stats[k]);
+    if (b1 > b0) out.push(`（${STAT_NAME[k]}が「${STAGE[b1]}」の域に入った）`);
+  }
+  if (numbers) {
+    deltas.sort((a, b) => b.d - a.d);
+    out.push('（今日の成長：' + deltas.slice(0, 4).map(({ k, d }) => `${STAT_NAME[k]} +${d.toFixed(1)}`).join('、') + '）');
+  }
+  return out;
+}
+
+const STAT_NAME: Record<string, string> = {
+  str: '筋力', end: '持久', agi: '敏捷', dex: '器用', will: '意志', focus: '集中', wit: '洞察', lore: '知識', empathy: '共感', speech: '弁舌',
+  sword_p: '剣（実技）', sword_t: '剣（理論）', bow_p: '弓（実技）', bow_t: '弓（理論）', magic_p: '魔法（実技）', magic_t: '魔法（理論）',
+  herb_p: '薬草（実技）', herb_t: '薬草（理論）', beast_p: '魔物（実戦の勘）', beast_t: '魔物（知識）', survival_p: '野外（実技）', survival_t: '野外（知識）',
+};

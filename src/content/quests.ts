@@ -400,6 +400,7 @@ const qMoon: EventDef = {
       lines: [n('東門の灯りの下で、摘んだ月光草を確かめた。淡い銀色の光が、まだ葉の上に残っている。')],
       effect: (s) => {
         const ok = !!s.flags._herbOk;
+        if (!ok) s.flags.moonFake = true;
         done(s, ok ? {} : { quality: 0.5, note: '依頼主の施療院から、半分が偽月草だったと連絡がありました。報酬は半額です。' });
         s.items.moonherb = 5;
         delete s.flags._herbOk;

@@ -652,6 +652,7 @@ const gate: ActivityDef[] = [
           const skillv = s.stats.herb_p + s.stats.herb_t * 0.5;
           const found = 1 + Math.floor(skillv / 6) + (chance(s, 0.5) ? 1 : 0);
           s.items.herb = (s.items.herb ?? 0) + found;
+          s.counters.herbTotal = (s.counters.herbTotal ?? 0) + found;
           log(s, `森の縁で薬草を${found}束摘んだ。`);
           const risk = s.flags.tideRising ? 0.45 : 0.3;
           if (chance(s, risk)) {

@@ -662,3 +662,81 @@ input {
 .explore {
   scroll-margin-top: 90px;
 }
+
+/* ───── 成長 ───── */
+.growth {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.g-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 12px 14px;
+}
+.g-card h3 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+.g-card h4 {
+  margin: 12px 0 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.g-card p {
+  margin: 4px 0;
+}
+.bar {
+  display: block;
+  height: 6px;
+  background: var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.stat-row {
+  display: grid;
+  grid-template-columns: 8.5em 4.5em 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  padding: 3px 0;
+}
+.stat-val {
+  font-variant-numeric: tabular-nums;
+}
+.pend {
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+.skill {
+  border-top: 1px dashed var(--line);
+  padding-top: 2px;
+}
+.wall {
+  font-size: 0.76rem;
+  color: var(--tell);
+}
+.ms {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0;
+  font-size: 0.88rem;
+  line-height: 1.8;
+}
+.ms li.done {
+  color: var(--read);
+}
+.good-note {
+  color: var(--read);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.tab {
+  font-size: 0.8rem;
+}
