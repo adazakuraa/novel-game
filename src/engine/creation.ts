@@ -177,3 +177,9 @@ export function talentHints(ids: string[], pronoun: string): string[] {
   return ids.map((id) => TALENTS.find((t) => t.id === id)!.hint.replaceAll('{I}', pronoun));
 }
 
+
+/** 古いセーブデータに、後から追加された人物などを補う */
+export function migrate(s: GameState, npcIds: string[]): GameState {
+  for (const id of npcIds) if (!s.npcs[id]) s.npcs[id] = emptyNpc();
+  return s;
+}

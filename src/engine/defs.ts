@@ -54,6 +54,8 @@ export interface MethodDef {
   slots?: number; // 消費する時間帯（既定1）
   focuses?: FocusDef[];
   companions?: boolean;
+  /** 選んだときに表示する注意（危険の予告など） */
+  warn?: (s: GameState, ctx: { companion?: string }) => string | null;
   /** 夜に行うと睡眠の質が下がる */
   late?: boolean;
   run: (s: GameState, ctx: { focus?: string; companion?: string }) => Line[];

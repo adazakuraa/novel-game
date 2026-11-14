@@ -22,6 +22,7 @@ import { SLOT_NAMES, dateLabel, fmt } from '../engine/text';
 import { band } from '../engine/stats';
 import { exportJson, loadSlot, saveSlot } from '../engine/save';
 import { SELF } from '../content/selftext';
+import { searchActions, type SearchHit } from '../engine/search';
 
 type Tab = 'act' | 'journal' | 'people' | 'items' | 'system';
 
@@ -205,6 +206,7 @@ function Planner({ s, update }: { s: GameState; update: Props['update'] }) {
 
   return (
     <div class="planner">
+      <FreeInput s={s} update={update} />
       <div class="locs">
         {locs.map((l) => {
           const o = locationOpen(s, l.id);
@@ -249,6 +251,47 @@ function Planner({ s, update }: { s: GameState; update: Props['update'] }) {
         )}
       </div>
     </div>
+  );
+}
+
+function FreeInput({ s, update }: { s: GameState; update: Props['update'] }) {
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
+  const run = (h: SearchHit) => {
+    setQ('');
+    setHits(null);
+    update((st) => {
+      moveTo(st, h.loc);
+      if (h.kind === 'talk') talkTo(st, h.npc!);
+      else doAction(st, h.activity!, h.method!, { focus: h.focus, companion: h.companion });
+    });
+  };
+  return (
+    <form
+      class="free"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setHits(searchActions(s, q));
+      }}
+    >
+      <div class="free-row">
+        <input value={q} placeholder="したいことを書く（例：リーネと模擬戦）" onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
+        <button class="btn small" type="submit">
+          探す
+        </button>
+      </div>
+      {hits && (
+        <div class="free-hits">
+          {hits.length === 0 && <p class="muted small">それに近い行動は思いつかなかった。言い方を変えるか、下の一覧から選んでみよう。</p>}
+          {hits.map((h) => (
+            <button type="button" class="method" disabled={!!h.blocked} onClick={() => run(h)}>
+              <span class="method-label">{h.label}</span>
+              {h.blocked && <span class="method-desc">{h.blocked}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </form>
   );
 }
 
@@ -309,6 +352,7 @@ function Activity({ s, a, open, toggle, update }: { s: GameState; a: ActivityDef
               </div>
             </div>
           )}
+          {m?.warn?.(s, { companion: comp }) && <p class="method-warn">{m.warn(s, { companion: comp })}</p>}
           {m && (
             <button class="btn primary do" onClick={() => update((st) => doAction(st, a.id, m.id, { focus, companion: comp }))}>
               {(m.slots ?? 1) === 0 ? '行う' : (m.slots ?? 1) > 1 ? `行う（${m.slots}つの時間帯）` : '行う'}

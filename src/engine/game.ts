@@ -190,6 +190,12 @@ export function endDay(s: GameState) {
   if (s.money >= LIVING_COST) {
     s.money -= LIVING_COST;
     s.cond.fed = true;
+  } else if (s.npcs.marta?.met && s.npcs.marta.rel.trust >= 4 && (s.counters.tab ?? 0) < 80) {
+    // マルタが宿代を待ってくれる（ツケ）
+    s.counters.tab = (s.counters.tab ?? 0) + LIVING_COST;
+    s.cond.fed = true;
+    q -= 0.05;
+    notes.push((s.counters.tab ?? 0) <= LIVING_COST ? '宿代が払えないと言うと、マルタは黙ってカウンターの下の帳面に{I}の名前を書いた。「稼げるようになったら返しな」' : 'マルタは何も言わずに、帳面の{I}の名前の横に数字を書き足した。');
   } else {
     q -= 0.3;
     s.cond.fed = false;
@@ -220,7 +226,7 @@ export function endDay(s: GameState) {
   }
 
   const perceived = perceptionLines(before, s);
-  const text = [...s.today, ...notes];
+  const text = [...s.today, ...notes.map((t) => fmt(s, t))];
   for (const p of perceived) text.push(p);
   for (const ins of insights) {
     text.push(BREAKTHROUGH[ins.skill]);

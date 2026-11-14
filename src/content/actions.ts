@@ -643,6 +643,8 @@ const gate: ActivityDef[] = [
         desc: '森の浅いところで薬草を探す。魔物に出くわすこともある。',
         slots: 2,
         companions: true,
+        warn: (s, { companion }) =>
+          (s.counters.rescued ?? 0) >= 1 && !companion ? '一度、助けられている。一人で倒れたら、次は誰も来ないかもしれない。' : null,
         run: (s, { companion }) => {
           gain(s, 'herb_p', 1.4, { difficulty: 20, key: 'herb:gather' });
           gain(s, 'survival_p', 1.0, { difficulty: 20, key: 'survival:gather' });
@@ -671,6 +673,8 @@ const gate: ActivityDef[] = [
         cond: (s) => s.rank >= 1,
         slots: 2,
         companions: true,
+        warn: (s, { companion }) =>
+          (s.counters.rescued ?? 0) >= 1 && !companion ? '一度、助けられている。一人で倒れたら、次は誰も来ないかもしれない。' : null,
         run: (s, { companion }) => {
           gain(s, 'survival_p', 1.2, { difficulty: 24, key: 'survival:hunt' });
           tire(s, 14);

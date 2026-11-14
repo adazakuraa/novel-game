@@ -11,8 +11,11 @@ loadContent();
 
 function step(s: GameState, r: () => number) {
   if (s.combat) {
-    const mv = availableMoves(s).filter((m) => m.id !== 'flee' || s.cond.hp < 30);
-    combatAct(s, mv[Math.floor(r() * mv.length)].id);
+    // 警告を無視しない、ふつうの慎重さのプレイヤーを想定する
+    const mv = availableMoves(s);
+    const warned = s.cond.hp < 30 && s.combat.loseMeansDeath;
+    const pickMove = warned ? mv.find((m) => m.id === 'flee')! : mv.filter((m) => m.id !== 'flee')[Math.floor(r() * (mv.length - 1))];
+    combatAct(s, pickMove.id);
     return;
   }
   if (s.scene) {

@@ -101,8 +101,9 @@ export function heroState(s: GameState): string {
   const hp = s.cond.hp;
   if (hp > 75) return 'まだ体は軽い。';
   if (hp > 50) return '息が上がり、あちこちが痛む。';
-  if (hp > 25) return '傷が熱い。動きが鈍っているのが自分でもわかる。';
-  return '視界の端が暗い。これ以上はまずい。';
+  const alone = s.combat?.loseMeansDeath ? 'ここで倒れたら、助けは来ない。' : '';
+  if (hp > 25) return '傷が熱い。動きが鈍っているのが自分でもわかる。' + (alone && hp < 40 ? alone : '');
+  return '視界の端が暗い。これ以上はまずい。' + alone;
 }
 
 export function availableMoves(s: GameState): { id: PlayerMove; label: string }[] {
@@ -355,7 +356,12 @@ export function playerMove(s: GameState, move: PlayerMove): CombatResult {
     for (const l of e.loot ?? []) if (chance(s, l.chance)) s.items[l.item] = (s.items[l.item] ?? 0) + 1;
     return 'win';
   }
-  if (s.cond.hp <= 0) return 'lose';
+  if (s.cond.hp <= 0 && c.loseMeansDeath && !c.lastStand) {
+    // 理不尽な即死を避ける：一度だけ踏みとどまり、はっきりと警告する
+    c.lastStand = true;
+    s.cond.hp = 1;
+    log.push('膝が崩れかけた。……次の一撃を受けたら、終わる。');
+  } else if (s.cond.hp <= 0) return 'lose';
   const ratio = c.enemyHp / c.enemyMaxHp;
   if (e.fleeAt && ratio < e.fleeAt && chance(s, 0.35)) {
     log.push(`${e.name}は身を翻し、逃げていった。`);

@@ -79,6 +79,7 @@ export interface CombatState {
   onFlee: SceneRef;
   loseMeansDeath: boolean;
   spar?: boolean; // 稽古試合（負けても大怪我しない）
+  lastStand?: boolean; // 死の手前で一度だけ踏みとどまった
   fled?: boolean;
 }
 
