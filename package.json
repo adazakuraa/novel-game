@@ -5,16 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && tsc --noEmit -p puzzle && vite build && vite build --config puzzle/vite.config.ts",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p puzzle",
+    "puzzle:dev": "vite --config puzzle/vite.config.ts",
+    "puzzle:gen": "tsx puzzle/tools/gen-queue.ts",
+    "puzzle:e2e": "tsx puzzle/e2e/run.ts"
   },
   "dependencies": {
     "preact": "^11.2.0"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^22.20.5",
+    "playwright": "^1.63.0",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.0"

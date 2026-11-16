@@ -29,3 +29,16 @@ npm run build    # dist/ に静的ファイルを出力
 | `src/content/` | 世界・行動・NPC・イベント・依頼のデータ（ネタバレ） |
 | `src/ui/` | 画面（Preact） |
 | `tests/` | 自動テスト |
+
+## パズルゲーム「おまちどう」（`puzzle/`）
+
+RPG とは別のアプリ。Bus Jam型のパズル（寿司屋テーマ）。公開先は `…/novel-game/puzzle/`。
+
+```bash
+npm run puzzle:dev   # 開発サーバー
+npm test             # 単体テスト・全ステージ検証・自動プレイ（RPG のテストも含む）
+npm run build && npm run puzzle:e2e   # UI テスト（Playwright）
+npm run puzzle:gen   # ステージの再生成（puzzle/stages/queue.json）
+```
+
+設計書・決定ログ：`puzzle/docs/`

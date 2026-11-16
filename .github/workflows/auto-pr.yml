@@ -1,0 +1,37 @@
+name: Auto PR
+
+# claude/ で始まるブランチに push されたら、main 向けの PR を自動で作る（既にあれば何もしない）
+# 事前に Settings → Actions → General → Workflow permissions で
+# 「Allow GitHub Actions to create and approve pull requests」をオンにしておく必要がある
+on:
+  push:
+    branches: ['claude/**']
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const head = context.ref.replace('refs/heads/', '');
+            const base = context.payload.repository.default_branch;
+            const { data: open } = await github.rest.pulls.list({ owner, repo, head: `${owner}:${head}`, state: 'open' });
+            if (open.length) { core.info(`PR #${open[0].number} が既にあります`); return; }
+            const { data: cmp } = await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${base}...${head}` });
+            if (!cmp.commits.length) { core.info('main との差分がありません'); return; }
+            const first = (c) => c.commit.message.split('\n')[0];
+            const title = first(cmp.commits[0]);  // ブランチ最初のコミット＝主な作業
+            const body = [
+              '## 変更内容',
+              ...cmp.commits.map((c) => `- ${first(c)}`),
+              '',
+              `ブランチ \`${head}\` への push で自動作成しました。`,
+            ].join('\n');
+            const { data: pr } = await github.rest.pulls.create({ owner, repo, head, base, title, body });
+            core.info(`PR #${pr.number} を作成しました: ${pr.html_url}`);
