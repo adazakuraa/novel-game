@@ -1,6 +1,8 @@
 name: Auto PR
 
 # claude/ で始まるブランチに push されたら、main 向けの PR を自動で作る（既にあれば何もしない）
+# 事前に Settings → Actions → General → Workflow permissions で
+# 「Allow GitHub Actions to create and approve pull requests」をオンにしておく必要がある
 on:
   push:
     branches: ['claude/**']
@@ -24,7 +26,7 @@ jobs:
             const { data: cmp } = await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${base}...${head}` });
             if (!cmp.commits.length) { core.info('main との差分がありません'); return; }
             const first = (c) => c.commit.message.split('\n')[0];
-            const title = cmp.commits.length === 1 ? first(cmp.commits[0]) : first(cmp.commits[cmp.commits.length - 1]);
+            const title = first(cmp.commits[0]);  // ブランチ最初のコミット＝主な作業
             const body = [
               '## 変更内容',
               ...cmp.commits.map((c) => `- ${first(c)}`),
