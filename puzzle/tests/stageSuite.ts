@@ -2,7 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { rng } from '../src/core/mode';
 import { apply, init, legalMoves, status, validateStage, type Frame, type QueueStage } from '../src/modes/queue/rules';
-import { greedyPolicy, measure, playout, randomPolicy, replay } from '../src/modes/queue/solver';
+import { greedyPolicy, measure, playout, randomPolicy, replay, Solver } from '../src/modes/queue/solver';
+import { findHint } from '../src/modes/queue/hint';
+import { RobustSolver } from '../src/modes/queue/robust';
 import { check, MEASURE, SPECS } from '../src/modes/queue/specs';
 import data from '../stages/queue.json';
 
@@ -25,6 +27,18 @@ export function checkStages(from: number, to: number) {
     it('見えている情報だけで必ずクリアでき、品質基準（複数の解法・難易度・罠の深さ）を満たす', () => {
       expect(m.solvable).toBe(true);
       expect(check(SPECS[idx], m, idx)).toEqual([]);
+    });
+
+    it('ヒントに従い続けると、見えている情報だけで決まる確実な手のまま必ずクリアできる', () => {
+      const robust = new RobustSolver(3_000_000), solver = new Solver(3_000_000);
+      let s = init(st);
+      for (let guard = 0; status(s) === 'playing' && guard < 500; guard++) {
+        const h = findHint(s, robust, solver);
+        expect(h.kind).toBe('safe');
+        if (h.kind === 'none') break;
+        s = apply(s, h.col)!;
+      }
+      expect(status(s)).toBe('cleared');
     });
 
     it('解法の手順をルール本体で再生するとクリアになる', () => {

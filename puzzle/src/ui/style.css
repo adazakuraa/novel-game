@@ -190,3 +190,22 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .stage.open { animation: none; }
 }
+
+/* ヒント：次に取るとよいお皿を、脈打つ太い輪で示す */
+.item.hint { z-index: 7; }
+.item.hint .inner { transform: translateY(-8%) scale(1.04); }
+.item.hint .inner::after {
+  content: ''; position: absolute; inset: -6%; border-radius: 50%;
+  border: 5px solid #ff8a00; box-shadow: 0 0 0 3px #fff, 0 0 18px 6px rgba(255, 138, 0, .9);
+  animation: hintpulse .9s ease-in-out infinite;
+}
+@keyframes hintpulse { 50% { transform: scale(1.1); box-shadow: 0 0 0 3px #fff, 0 0 26px 10px rgba(255, 138, 0, .6); } }
+.hintmsg {
+  position: absolute; left: 50%; top: 60px; transform: translateX(-50%); z-index: 15;
+  width: min(340px, calc(100% - 32px)); padding: 10px 14px; border-radius: 14px; text-align: center;
+  background: rgba(42, 33, 64, .95); color: #f5e9cc; font-size: 14px; line-height: 1.5;
+  box-shadow: 0 6px 16px rgba(0,0,0,.3); animation: fade .2s ease-out;
+}
+.hintmsg .btn { margin-top: 8px; min-height: 40px; padding: 6px 14px; font-size: 14px; }
+.hintmsg .close { display: block; margin-top: 4px; font-size: 12px; opacity: .7; }
+.icon.hintbtn[disabled] { opacity: .5; }
