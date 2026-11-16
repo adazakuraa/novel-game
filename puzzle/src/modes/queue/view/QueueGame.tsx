@@ -158,7 +158,7 @@ function Scene({ L, stage, theme, shown, els, onTap }: {
       {s.seats.map((seat, si) => Array.from({ length: L.maxN }, (_, i) => {
         const p = L.slot(si, i);
         const on = seat.order >= 0 && i < stage.orders[seat.order].n;
-        return <div class={'mat' + (on ? '' : ' off')} style={{ left: `${p.x}px`, top: `${p.y}px`, width: `${sz}px`, height: `${sz}px` }} />;
+        return <div class={'mat' + (on ? '' : ' off')} style={{ left: `${p.x}px`, top: `${p.y}px`, width: `${L.u}px`, height: `${L.u}px` }} />;
       }))}
       <div class="label" style={{ left: `${L.strip.x}px`, top: `${L.strip.y}px` }}>
         {theme.words.next}（{waiting}人）
@@ -170,7 +170,7 @@ function Scene({ L, stage, theme, shown, els, onTap }: {
       </div>
       {Array.from({ length: stage.bench }, (_, j) => {
         const p = L.bench(j);
-        return <div class="slot" style={{ left: `${p.x}px`, top: `${p.y}px`, width: `${sz}px`, height: `${sz}px` }} />;
+        return <div class="slot" style={{ left: `${p.x}px`, top: `${p.y}px`, width: `${L.u}px`, height: `${L.u}px` }} />;
       })}
       {/* 盤面と厨房 */}
       <div class="exit" style={{ left: `${L.board.x}px`, top: `${L.board.y - sz * 0.42}px`, width: `${L.board.w}px`, height: `${sz * 0.42}px` }}>
@@ -195,7 +195,7 @@ function Scene({ L, stage, theme, shown, els, onTap }: {
         let isCur = false;
         if (seat !== undefined) { p = L.guest(seat); isCur = true; }
         else if (d >= s.next) p = { ...L.chip(d - s.next), scale: L.chipSize / L.guestSize };
-        else if (leaving?.order === d) p = { ...L.gone(leaving.seat) };
+        else if (leaving?.order === d) p = { ...L.guest(leaving.seat), x: L.W + sz, opacity: 0 };
         else return null;
         const got = seat !== undefined ? s.seats[seat].got.length : 0;
         return (
