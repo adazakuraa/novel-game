@@ -36,7 +36,7 @@ export function App() {
         <div class="title screen">
           <div class="noren-top" />
           <h1>{theme.title}</h1>
-          <p class="sub">お客さんを順番どおりに席へ案内するパズル</p>
+          <p class="sub">お客さんの注文どおりにお寿司を出すパズル</p>
           <div class="menu">
             <button class="btn primary" onClick={() => setScreen({ k: 'play', stage: p.current?.stage ?? unlocked })}>
               {p.current ? `つづきから（ステージ ${p.current.stage}）` : allClear ? 'ステージを選ぶ' : `ステージ ${unlocked} から`}
@@ -96,6 +96,7 @@ function Play({ stage, data, commit, speed, onBack, onNext }: {
   const [run, setRun] = useState(0);                 // やり直しのたびに増やして盤面を作り直す
   const [moves, setMoves] = useState(initial);
   const [end, setEnd] = useState<PlayStatus | null>(null);
+  const [endFull, setEndFull] = useState(false);
   const [intro, setIntro] = useState(!!stage.intro && initial.length === 0);
   const [confirm, setConfirm] = useState(false);
 
@@ -113,8 +114,8 @@ function Play({ stage, data, commit, speed, onBack, onNext }: {
       </header>
       <QueueGame key={run} stage={stage} theme={theme} speed={speed} initialMoves={run === 0 ? initial : []}
         onMove={(m) => { setMoves(m); commit((d) => setCurrent(d, MODE, { stage: stage.id, moves: m })); }}
-        onEnd={(st) => {
-          setEnd(st);
+        onEnd={(st, full) => {
+          setEnd(st); setEndFull(full);
           if (st === 'cleared') commit((d) => markCleared(d, MODE, stage.id));
         }} />
       {intro && (
@@ -149,10 +150,11 @@ function Play({ stage, data, commit, speed, onBack, onNext }: {
           </div>
         </div>
       )}
-      {(end === 'full' || end === 'stuck') && (
+      {end === 'stuck' && (
         <div class="overlay lose">
           <div class="card">
-            <h2>{end === 'full' ? theme.words.full : theme.words.stuck}</h2>
+            <h2>ゲームオーバー</h2>
+            <p>{endFull ? theme.words.stuckFull : theme.words.stuck}</p>
             <p>何度でも無料でやり直せます。</p>
             <div class="row">
               <button class="btn" onClick={onBack}>ステージ選択</button>

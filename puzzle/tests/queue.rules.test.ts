@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  apply, init, legalMoves, movable, reach, pathFrom, status, validateStage, stateKey,
-  type Frame, type QueueStage, type StageCell,
+  apply, init, legalMoves, movable, pathUp, status, validateStage, stateKey,
+  type Frame, type Order, type QueueStage, type StageCell,
 } from '../src/modes/queue/rules';
 import { Solver } from '../src/modes/queue/solver';
 
-/** 文字で盤面を書く： '.' 空き '#' 柱  数字=客の色  'L数字' は書けないので locks で指定 */
-function parse(rows: string[], dishes: number[], bench = 5, extra: Record<number, StageCell> = {}): QueueStage {
+/** 文字で盤面を書く： '.' 空き '#' 柱  数字=皿の色。注文は [色, 皿数] */
+function parse(rows: string[], orders: [number, number][], bench = 5, extra: Record<number, StageCell> = {}): QueueStage {
   const h = rows.length, w = rows[0].length;
   const cells: StageCell[] = [];
   rows.join('').split('').forEach((ch, i) => {
@@ -15,135 +15,134 @@ function parse(rows: string[], dishes: number[], bench = 5, extra: Record<number
     else if (ch === '#') cells.push({ wall: true });
     else cells.push({ c: Number(ch) });
   });
-  return { id: 0, w, h, cells, dishes, bench };
+  return { id: 0, w, h, cells, orders: orders.map(([c, n]): Order => ({ c, n })), bench };
 }
 
-describe('道の判定', () => {
-  it('最上段の客はいつでも出られる。空きマスを通って行ける客だけが動ける', () => {
-    const s = init(parse(['0.1', '#20', '111'], [0, 1, 1]));
-    // 0行目: 0(0) 空き(1) 1(2) / 1行目: 柱(3) 2(4) 0(5) / 2行目: 1 1 1
-    // 色2は皿に無いので validate は通らないが、道の判定だけ見る
+describe('取れる皿（真上にしか動けない）', () => {
+  it('真上がすべて空いている皿だけ取れる。横に空きがあっても回り込めない', () => {
+    const s = init(parse(['0.1', '010', '111'], [[0, 3], [1, 5]]));
+    // 0行目: 0 空 1 / 1行目: 0 1 0 / 2行目: 1 1 1
+    // 列1の(1,1)は真上が空き → 取れる。(0,1)(2,1)は真上に皿 → 取れない
     expect(movable(s).sort((a, b) => a - b)).toEqual([0, 2, 4]);
   });
-  it('道は自分のマスから最上段へ向かう', () => {
-    const s = init(parse(['0..', '#.#', '#.0'], [0]));
-    const p = reach(s);
-    const path = pathFrom(p, 8);
-    expect(path[0]).toBe(8);
-    expect(path[path.length - 1]).toBeLessThan(3);
-    // 隣り合うマスだけでつながっている
-    for (let i = 1; i < path.length; i++) {
-      const a = path[i - 1], b = path[i];
-      expect(Math.abs(a - b) === 1 || Math.abs(a - b) === 3).toBe(true);
-    }
+  it('柱の下の皿は取れない', () => {
+    const s = init(parse(['#0', '00'], [[0, 3]]));
+    expect(movable(s)).toEqual([1]);
   });
-  it('柱に囲まれた客は動けない', () => {
-    const s = init(parse(['0#0', '#0#'], [0]));
-    expect(movable(s)).toEqual([0, 2]);
+  it('道は自分のマスから真上の最上段まで', () => {
+    expect(pathUp(3, 7)).toEqual([7, 4, 1]);
   });
 });
 
-describe('着席・待ち席・連鎖', () => {
-  it('同じ注文はカウンター、違う注文は待ち席へ', () => {
-    let s = init(parse(['01', '00', '11'], [0, 1]));
-    s = apply(s, 1)!; // 色1 → 待ち席
+describe('注文・置き台・連鎖', () => {
+  it('注文に合う皿はお客さんへ、合わない皿は置き台へ', () => {
+    let s = init(parse(['01', '00'], [[0, 3], [1, 1]]));
+    s = apply(s, 1)!; // 色1 → 置き台
     expect(s.bench.length).toBe(1);
-    s = apply(s, 0)!; // 色0 → 席
-    expect(s.seats.length).toBe(1);
+    s = apply(s, 0)!; // 色0 → お客さん
+    expect(s.got.length).toBe(1);
   });
-  it('皿が埋まると次の皿が出て、待ち席の合う客が自動で移る（連鎖）', () => {
-    // 先に色1を3人待ち席に入れてから色0の皿を埋めると、次の皿（色1）が一気に埋まる
-    const st = parse(['111', '000'], [0, 1], 5);
+  it('注文の皿数がそろうと次のお客さんへ。置き台の合う皿は自動で渡る（連鎖）', () => {
+    const st = parse(['1111', '0000'], [[0, 4], [1, 2], [1, 2]]);
     let s = init(st);
-    s = apply(s, 0)!; s = apply(s, 1)!; s = apply(s, 2)!;
-    expect(s.bench.length).toBe(3);
-    expect(status(s)).toBe('playing');
-    s = apply(s, 3)!; s = apply(s, 4)!;
+    for (const c of [0, 1, 2, 3]) s = apply(s, c)!;
+    expect(s.bench.length).toBe(4);
+    s = apply(s, 4)!; s = apply(s, 5)!; s = apply(s, 6)!;
     const frames: Frame[] = [];
-    s = apply(s, 5, frames)!;
+    s = apply(s, 7, frames)!;
     expect(status(s)).toBe('cleared');
-    expect(frames.map((f) => f.step.k)).toEqual(['walk', 'dishDone', 'pull', 'pull', 'pull', 'dishDone']);
+    expect(frames.map((f) => f.step.k)).toEqual(['walk', 'orderDone', 'pull', 'pull', 'orderDone', 'pull', 'pull', 'orderDone']);
   });
-  it('待ち席が満席になったら負け', () => {
-    const st = parse(['1112', '0000', '0022'], [0, 0, 1, 2], 3);
+  it('置き台がいっぱいでも、注文に合う皿は取れる。合わない皿は取れない', () => {
+    const st = parse(['120', '000'], [[0, 4], [1, 1], [2, 1]], 2);
     let s = init(st);
     s = apply(s, 0)!; s = apply(s, 1)!;
+    expect(s.bench.length).toBe(2);
     expect(status(s)).toBe('playing');
-    s = apply(s, 2)!;
-    expect(status(s)).toBe('full');
+    expect(legalMoves(s).sort()).toEqual([2, 3, 4]);
+    s = apply(s, 3)!;
+    expect(s.got.length).toBe(1);
+  });
+  it('打てる手が無くなったらゲームオーバー（置き台がいっぱいで、注文に合う皿が取れない）', () => {
+    const st = parse(['12', '33', '00'], [[0, 2], [1, 1], [2, 1], [3, 2]], 2);
+    let s = init(st);
+    s = apply(s, 0)!; s = apply(s, 1)!;
+    // 置き台いっぱい、取れるのは色3（注文は色0）→ 打てる手が無い
+    expect(movable(s).length).toBe(2);
     expect(legalMoves(s)).toEqual([]);
-    expect(apply(s, 3)).toBeNull();
-  });
-  it('動かせる客がいなければ手詰まり', () => {
-    // 色0の客は柱の奥。出口にいるのは予約札の客だけ
-    const st = parse(['1#', '0#', '0#', '0#'], [0, 1], 5, { 0: { c: 1, lock: 1 } });
-    // 色1が3人いないので validate は通らないが、手詰まり判定だけ見る
-    const s = init(st);
     expect(status(s)).toBe('stuck');
+    expect(apply(s, 2)).toBeNull();
   });
-  it('動けない客をタップしても何も起きない', () => {
-    const s = init(parse(['0', '0', '0'], [0]));
+  it('取れる皿が1枚も無ければゲームオーバー', () => {
+    const st = parse(['1#', '0#', '0#', '0#'], [[0, 3], [1, 1]], 5, { 0: { c: 1, lock: 1 } });
+    expect(status(init(st))).toBe('stuck');
+  });
+  it('取れない皿をタップしても何も起きない', () => {
+    const s = init(parse(['0', '0', '0'], [[0, 3]]));
     expect(apply(s, 1)).toBeNull();
     expect(apply(s, 0)).not.toBeNull();
   });
 });
 
 describe('ギミック', () => {
-  it('予約札：札の枚数だけ皿が下がるまで動けない', () => {
-    const st = parse(['1000', '1111'], [0, 1, 1], 5, { 0: { c: 1, lock: 1 } });
-    // 0: 予約札つき色1 / 1,2,3: 色0 / 4..7: 色1
+  it('予約札：札の人数だけお客さんが帰るまで取れない', () => {
+    const st = parse(['1000', '1111'], [[0, 3], [1, 3], [1, 2]], 5, { 0: { c: 1, lock: 1 } });
     let s = init(st);
     expect(apply(s, 0)).toBeNull();
     s = apply(s, 1)!; s = apply(s, 2)!; s = apply(s, 3)!;
-    expect(s.dish).toBe(1);
+    expect(s.order).toBe(1);
     expect(apply(s, 0)).not.toBeNull();
   });
-  it('のれん：前のマスが空くと順番に客が出てくる', () => {
-    const st = parse(['.0', '.0'], [0, 1], 5, { 0: null, 2: { tunnel: 'u', queue: [1, 1, 1] } });
+  it('のれん：上のマスが空くと順番に皿が出てくる', () => {
+    const st = parse(['.0', '.0'], [[0, 2], [1, 3]], 5, { 0: null, 2: { tunnel: 'u', queue: [1, 1, 1] } });
     let s = init(st);
-    // 出口マス(0)は最初から空なので、すぐ1人目が出る
-    expect(s.custs[s.board[0]].c).toBe(1);
+    expect(s.items[s.board[0]].c).toBe(1);   // 上のマスは最初から空なので、すぐ1枚目が出る
     expect(s.tunnels[0].next).toBe(1);
-    s = apply(s, 0)!; // 色1 → 待ち席。次の客が出る
+    s = apply(s, 0)!;
     expect(s.tunnels[0].next).toBe(2);
     expect(s.board[0]).toBeGreaterThanOrEqual(0);
   });
 });
 
 describe('ステージデータの検証', () => {
-  it('客の数と皿の数が合わなければ指摘する', () => {
-    expect(validateStage(parse(['00', '01'], [0]))).not.toEqual([]);
-    expect(validateStage(parse(['000'], [0]))).toEqual([]);
+  it('皿の数と注文の合計が合わなければ指摘する', () => {
+    expect(validateStage(parse(['00', '01'], [[0, 3]]))).not.toEqual([]);
+    expect(validateStage(parse(['000', '11.'], [[1, 2], [0, 3]]))).toEqual([]);
   });
 });
 
 describe('ソルバー', () => {
   it('総当たりで確かめた小さな盤面と結果が一致する', () => {
-    // 総当たり（記憶なし）と比べる
     const brute = (s: ReturnType<typeof init>): boolean => {
       const st = status(s);
       if (st === 'cleared') return true;
       if (st !== 'playing') return false;
       return legalMoves(s).some((m) => brute(apply(s, m)!));
     };
-    const boards: [string[], number[], number][] = [
-      [['011', '100'], [0, 1], 2],
-      [['011', '100'], [1, 0], 2],
-      [['012', '201', '120', '222'], [2, 0, 1, 2], 3],
-      [['012', '201', '120', '222'], [0, 1, 2, 2], 2],
-      [['112', '201', '020', '222'], [1, 2, 0, 2], 2],
-      [['012', '120', '201'], [2, 1, 0], 3],
-      [['012', '120', '201'], [2, 1, 0], 2],
+    const boards: [string[], [number, number][], number][] = [
+      [['011', '100'], [[0, 3], [1, 3]], 1],
+      [['011', '100'], [[1, 3], [0, 3]], 2],
+      [['012', '201', '120', '222'], [[2, 3], [0, 3], [1, 3], [2, 3]], 2],
+      [['012', '201', '120', '222'], [[0, 3], [1, 3], [2, 6]], 2],
+      [['112', '201', '020', '222'], [[1, 2], [2, 4], [0, 3], [1, 1], [2, 2]], 2],
+      [['012', '120', '201'], [[2, 2], [1, 3], [0, 3], [2, 1]], 1],
+      [['012', '120', '201'], [[2, 3], [1, 3], [0, 3]], 3],
     ];
-    for (const [rows, dishes, bench] of boards) {
-      const st = parse(rows, dishes, bench);
+    let solvable = 0;
+    for (const [rows, orders, bench] of boards) {
+      const st = parse(rows, orders, bench);
       expect(validateStage(st)).toEqual([]);
       const s = init(st);
-      expect(new Solver().solvable(s)).toBe(brute(s));
+      const b = brute(s);
+      if (b) solvable++;
+      expect(new Solver().solvable(s)).toBe(b);
     }
+    // 解ける盤面と解けない盤面の両方を確かめている
+    expect(solvable).toBeGreaterThan(0);
+    expect(solvable).toBeLessThan(boards.length);
   });
-  it('局面キーは待ち席の並び順に依存しない', () => {
-    const st = parse(['12', '00', '0.', '12', '12'], [0, 1, 2], 5);
+  it('局面キーは置き台の並び順に依存しない', () => {
+    const st = parse(['12', '00', '00', '12', '12'], [[0, 4], [1, 3], [2, 3]], 5);
     const a = apply(apply(init(st), 0)!, 1)!;
     const b = apply(apply(init(st), 1)!, 0)!;
     expect(stateKey(a)).toBe(stateKey(b));

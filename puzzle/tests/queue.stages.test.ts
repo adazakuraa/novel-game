@@ -51,16 +51,17 @@ describe.each(stages.map((s) => [s.id, s] as const))('ステージ %i', (id, st)
         const { trail, win } = playout(st, policy, r);
         const last = trail[trail.length - 1];
         const s = status(last);
-        expect(['cleared', 'full', 'stuck']).toContain(s);
+        expect(['cleared', 'stuck']).toContain(s);
         expect(win).toBe(s === 'cleared');
-        if (s === 'full') expect(last.bench.length).toBe(st.bench);
         if (s === 'stuck') expect(legalMoves(last)).toEqual([]);
-        // 客は増えも減りもしない
         for (const t of trail) {
+          // 皿は増えも減りもしない
           const onBoard = t.board.filter((v) => v >= 0).length;
           const hidden = t.tunnels.reduce((a, x) => a + x.ids.length - x.next, 0);
-          const done = t.dish * 3;
-          expect(onBoard + hidden + t.seats.length + t.bench.length + done).toBe(t.custs.length);
+          const done = st.orders.slice(0, t.order).reduce((a, o) => a + o.n, 0);
+          expect(onBoard + hidden + t.got.length + t.bench.length + done).toBe(t.items.length);
+          // 置き台は上限を超えない
+          expect(t.bench.length).toBeLessThanOrEqual(st.bench);
         }
       }
     }

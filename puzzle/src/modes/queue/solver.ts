@@ -1,6 +1,6 @@
 // 解法探索と品質指標。ステージ生成（tools）と全ステージ検証（tests）で使う。
 import { rng, type Rng } from '../../core/mode';
-import { apply, init, legalMoves, losesNow, status, stateKey, type QState, type QueueStage } from './rules';
+import { apply, init, legalMoves, status, stateKey, type QState, type QueueStage } from './rules';
 
 export class Solver {
   /** 局面キー → クリア可能か（探索し切った局面だけを記録） */
@@ -25,16 +25,13 @@ export class Solver {
   }
 
   private dfs(s: QState, path: number[], order?: (s: QState, moves: number[]) => number[]): boolean {
-    if (s.dish >= s.stage.dishes.length) return true;
-    if (s.bench.length >= s.stage.bench) return false;
+    if (s.order >= s.stage.orders.length) return true;
     const k = stateKey(s);
     const m = this.memo.get(k);
     if (m === false) return false;
     // m===true でも手順を得るために降りる（記録済みなので速い）
     if (++this.nodes > this.budget) throw new SolverBudgetError();
     let moves = legalMoves(s);
-    // 満席になる手は打っても負けるだけなので探索しない
-    moves = moves.filter((m) => !losesNow(s, m));
     moves = order ? order(s, moves) : defaultOrder(s, moves);
     for (const mv of moves) {
       const n = apply(s, mv)!;
@@ -51,12 +48,12 @@ export class SolverBudgetError extends Error {
   constructor() { super('solver budget exceeded'); }
 }
 
-/** 合う客を先に、待ち席へ送るなら早く出番が来る色を先に */
+/** 注文に合う皿を先に、置き台へ置くなら早く出番が来る色を先に */
 function defaultOrder(s: QState, moves: number[]): number[] {
-  const d = s.stage.dishes;
-  const soon = (c: number) => { const i = d.indexOf(c, s.dish); return i < 0 ? 999 : i - s.dish; };
+  const d = s.stage.orders;
+  const soon = (c: number) => { const i = d.findIndex((o, j) => j >= s.order && o.c === c); return i < 0 ? 999 : i - s.order; };
   return moves
-    .map((m) => ({ m, v: soon(s.custs[s.board[m]].c) }))
+    .map((m) => ({ m, v: soon(s.items[s.board[m]].c) }))
     .sort((a, b) => a.v - b.v)
     .map((x) => x.m);
 }
@@ -78,16 +75,14 @@ export function replay(stage: QueueStage, moves: number[]): QState | null {
 
 export type Policy = (s: QState, moves: number[], r: Rng) => number;
 
-/** 何も考えない：動かせる客から無作為に選ぶ */
+/** 何も考えない：打てる手から無作為に選ぶ */
 export const randomPolicy: Policy = (_s, moves, r) => r.pick(moves);
 
-/** 素直な打ち手：合う客がいればその中から、いなければ待ち席へ（負けが確定する手は避ける） */
+/** 素直な打ち手：注文に合う皿があればその中から、なければ無作為に置き台へ */
 export const greedyPolicy: Policy = (s, moves, r) => {
-  const want = s.stage.dishes[s.dish];
-  const match = moves.filter((m) => s.custs[s.board[m]].c === want);
-  if (match.length) return r.pick(match);
-  const safe = moves.filter((m) => !losesNow(s, m));
-  return r.pick(safe.length ? safe : moves);
+  const want = s.stage.orders[s.order].c;
+  const match = moves.filter((m) => s.items[s.board[m]].c === want);
+  return r.pick(match.length ? match : moves);
 };
 
 export function playout(stage: QueueStage, policy: Policy, r: Rng): { win: boolean; trail: QState[] } {
@@ -103,8 +98,8 @@ export function playout(stage: QueueStage, policy: Policy, r: Rng): { win: boole
 export interface Metrics {
   solvable: boolean;
   solution: number[];
-  customers: number;
-  /** 本質的に異なる解法の数（どの客を待ち席に通したかの組が違う解法）。上限 cap まで */
+  customers: number;   // 皿の総数
+  /** 本質的に異なる解法の数（どの皿を置き台に通したかの組が違う解法） */
   distinct: number;
   /** 最初の一手のうち、クリア可能なまま進める手の数 / 全部の手 */
   firstWin: number;
@@ -113,7 +108,7 @@ export interface Metrics {
   greedyWin: number;
   /** 「詰みが確定してから、実際に負けるまで」に打てる最大の手数（罠の深さ） */
   trapDepth: number;
-  /** 最善手順で待ち席の空きが最も少なくなったときの空き席数（負けになる最後の1席は数えない） */
+  /** 解法の手順で置き台の空きが最も少なくなったときの空きの数 */
   minSlack: number;
   nodes: number;
 }
@@ -146,7 +141,7 @@ export function measure(stage: QueueStage, opt: MeasureOptions = {}): Metrics | 
 
   const solver = new Solver(opt.budget);
   const solution = solver.solve(s0);
-  const base = { customers: s0.custs.length, greedyWin };
+  const base = { customers: s0.items.length, greedyWin };
   if (!solution) {
     return { ...base, solvable: false, solution: [], distinct: 0, firstWin: 0, firstAll: 0, randomWin: 0, trapDepth: 0, minSlack: 0, nodes: solver.nodes };
   }
@@ -160,7 +155,7 @@ export function measure(stage: QueueStage, opt: MeasureOptions = {}): Metrics | 
     trap = Math.max(trap, longestSurvival(t[j], memo, solver));
   }
 
-  // 異なる解法：手の順番を無作為にして何度も解き、待ち席に通した客の組を数える
+  // 異なる解法：手の順番を無作為にして何度も解き、置き台に通した皿の組を数える
   const sigs = new Set<string>();
   const sigOf = (moves: number[]) => {
     let s = s0; const used: number[] = [];
@@ -189,7 +184,7 @@ export function measure(stage: QueueStage, opt: MeasureOptions = {}): Metrics | 
   let s = s0;
   for (const m of solution) {
     s = apply(s, m)!;
-    if (status(s) === 'playing') minSlack = Math.min(minSlack, stage.bench - 1 - s.bench.length);
+    if (status(s) === 'playing') minSlack = Math.min(minSlack, stage.bench - s.bench.length);
   }
 
   return {
@@ -201,7 +196,7 @@ export function measure(stage: QueueStage, opt: MeasureOptions = {}): Metrics | 
     firstAll: first.length,
     randomWin: rw / runs,
     trapDepth: trap,
-    minSlack: minSlack === Infinity ? stage.bench - 1 : minSlack,
+    minSlack: minSlack === Infinity ? stage.bench : minSlack,
     nodes: solver.nodes,
   };
 }
@@ -214,7 +209,7 @@ function longestSurvival(s: QState, memo: Map<string, number>, solver: Solver): 
   if (m !== undefined) return m;
   if (++solver.nodes > solver.budget) throw new SolverBudgetError();
   let best = 0;
-  for (const mv of moves) best = Math.max(best, losesNow(s, mv) ? 1 : 1 + longestSurvival(apply(s, mv)!, memo, solver));
+  for (const mv of moves) best = Math.max(best, 1 + longestSurvival(apply(s, mv)!, memo, solver));
   memo.set(k, best);
   return best;
 }
