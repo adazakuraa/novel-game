@@ -95,7 +95,43 @@ export const SPECS: Spec[] = [
   S({ w: 6, rows: 5, depth: 6, colors: 5, bench: 3, seats: 2, sizes: V, locks: 4, good: 0.72 }),
   S({ w: 6, rows: 5, depth: 6, colors: 6, bench: 3, seats: 2, sizes: V, locks: 4, good: 0.72 }),
   S({ w: 6, rows: 5, depth: 6, colors: 6, bench: 3, seats: 2, sizes: V, locks: 5, good: 0.71 }),
+  // 61〜200：新しいギミックは足さず、これまでの要素の組み合わせを10面ずつの帯で回す
+  ...moreStages(),
 ];
+
+/**
+ * 61〜200面の設計表。帯の種類は「お客さん1人」「お客さん2人」「予約札」「6列」。
+ * 周回（lap）が進むほど予約札・色・段数を増やし、各帯の中では目標の難しさを少しずつ上げる（帯の最初は少しやさしい）。
+ * 目標の下限は、見えている情報だけで解ける盤面が作れる範囲（生成時の計測による）に合わせている。
+ */
+function moreStages(): Spec[] {
+  const order = ['solo', 'duo', 'lock', 'wide', 'solo', 'duo', 'lock', 'wide', 'solo', 'duo', 'lock', 'wide', 'lock', 'wide'] as const;
+  const out: Spec[] = [];
+  order.forEach((kind, band) => {
+    const lap = Math.floor(band / 4);              // 0〜3
+    for (let k = 0; k < 10; k++) {
+      const t = k / 9;                             // 帯の中の進み具合 0→1
+      const rows = k % 2 === 0 || lap >= 2 ? 5 : 4;
+      const base = { rows, depth: rows + 1, sizes: V };
+      const good = (hi: number, lo: number) => Math.round((hi - (hi - lo) * t - lap * 0.003) * 1000) / 1000;
+      switch (kind) {
+        case 'solo':
+          out.push(S({ ...base, w: 5, colors: 4, bench: k % 3 === 2 ? 4 : 3, locks: Math.min(3, lap + (k >= 5 ? 1 : 0)), good: good(0.86, 0.78) }));
+          break;
+        case 'duo':
+          out.push(S({ ...base, w: 5, colors: lap >= 2 && k >= 5 ? 6 : 5, bench: 3, seats: 2, locks: lap, good: good(0.85, 0.73) }));
+          break;
+        case 'lock':
+          out.push(S({ ...base, w: k % 2 ? 6 : 5, colors: 5, bench: 3, seats: 2, locks: Math.min(6, 3 + lap + (k >= 5 ? 1 : 0)), good: good(0.84, 0.72) }));
+          break;
+        case 'wide':
+          out.push(S({ ...base, rows: 5, depth: 6, w: 6, colors: k >= 5 || lap >= 2 ? 6 : 5, bench: 3, seats: 2, locks: Math.min(5, 1 + lap + (k >= 5 ? 1 : 0)), good: good(0.83, 0.7) }));
+          break;
+      }
+    }
+  });
+  return out;
+}
 
 /** 品質の計測条件（生成と全ステージ検証で同じにする） */
 export const MEASURE = { runs: 100, budget: 300_000 };

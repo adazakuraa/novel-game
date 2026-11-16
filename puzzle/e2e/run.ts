@@ -76,6 +76,22 @@ await test('最大のステージでも盤面が画面内に収まり、ボタ�
   }
 });
 
+await test('iPhone の Chrome（上下にバーが出て高さが短い）でも盤面が横幅いっぱい近くまで使える', async () => {
+  // iPhone 13 の Chrome で実際に使える大きさに近い画面
+  const page = await browser.newPage({ viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true });
+  for (const n of [34, stages.length]) {
+    await startStage(page, n);
+    const r = await page.evaluate(() => {
+      const b = document.querySelector('.board')!.getBoundingClientRect();
+      const items = [...document.querySelectorAll('.item[data-col]')].map((e) => e.getBoundingClientRect());
+      return { boardW: b.width, maxBottom: Math.max(...items.map((x) => x.bottom)), W: innerWidth, H: innerHeight };
+    });
+    assert(r.boardW >= r.W * 0.8, `ステージ${n}：盤面が狭い（${Math.round(r.boardW)}px / ${r.W}px）`);
+    assert(r.maxBottom <= r.H, `ステージ${n}：盤面がはみ出している`);
+  }
+  await page.close();
+});
+
 await test('遊び方の説明 → いちばん上のお皿をタップすると取れて列が上がる → 下のお皿は取れない', async () => {
   const { page, errors } = await newPage();
   await page.goto(url + '?anim=0');
