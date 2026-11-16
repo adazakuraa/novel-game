@@ -14,10 +14,10 @@ describe('ステージ一覧', () => {
     expect(stages.length).toBe(SPECS.length);
     stages.forEach((s, i) => expect(s.id).toBe(i + 1));
   });
-  it('難易度の目標（素直な打ち手の勝率の上限）は先へ進むほど下がっていく（各ギミックの導入面を除く）', () => {
+  it('難易度の目標（正解の手の割合）は先へ進むほど下がっていく（10面ごとの帯の最初の面は少しやさしく始めてよい）', () => {
     for (let i = 1; i < SPECS.length; i++) {
-      if (SPECS[i].intro) continue;
-      expect(SPECS[i].greedy[1]).toBeLessThanOrEqual(SPECS[i - 1].greedy[1] + 1e-9);
+      if (SPECS[i].intro || i % 10 === 0) continue;
+      expect(SPECS[i].good).toBeLessThanOrEqual(SPECS[i - 1].good + 1e-9);
     }
   });
 });
@@ -26,9 +26,10 @@ describe.each(stages.map((s) => [s.id, s] as const))('ステージ %i', (id, st)
   const idx = id - 1;
   it('データが正しい', () => {
     expect(validateStage(st)).toEqual([]);
-    expect(st.w).toBe(SPECS[idx].w);
-    expect(st.h).toBe(SPECS[idx].h);
+    expect(st.cols.length).toBe(SPECS[idx].w);
+    expect(st.rows).toBe(SPECS[idx].rows);
     expect(st.bench).toBe(SPECS[idx].bench);
+    expect(st.seats).toBe(SPECS[idx].seats ?? 1);
   });
 
   const m = measure(st, { ...MEASURE, seed: st.seed ?? 0 });
@@ -56,10 +57,12 @@ describe.each(stages.map((s) => [s.id, s] as const))('ステージ %i', (id, st)
         if (s === 'stuck') expect(legalMoves(last)).toEqual([]);
         for (const t of trail) {
           // 皿は増えも減りもしない
-          const onBoard = t.board.filter((v) => v >= 0).length;
-          const hidden = t.tunnels.reduce((a, x) => a + x.ids.length - x.next, 0);
-          const done = st.orders.slice(0, t.order).reduce((a, o) => a + o.n, 0);
-          expect(onBoard + hidden + t.got.length + t.bench.length + done).toBe(t.items.length);
+          const inCols = t.colIds.reduce((a, ids, c) => a + ids.length - t.top[c], 0);
+          const atSeats = t.seats.reduce((a, x) => a + x.got.length, 0);
+          const seated = new Set(t.seats.map((x) => x.order));
+          const done = st.orders.reduce((a, o, d) => a + (d < t.next && !seated.has(d) ? o.n : 0), 0);
+          expect(inCols + atSeats + t.bench.length + done).toBe(t.items.length);
+          expect(t.served).toBe(st.orders.filter((_, d) => d < t.next && !seated.has(d)).length);
           // 置き台は上限を超えない
           expect(t.bench.length).toBeLessThanOrEqual(st.bench);
         }
