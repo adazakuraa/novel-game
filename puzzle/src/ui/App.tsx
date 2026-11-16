@@ -2,7 +2,7 @@
 import { useRef, useState } from 'preact/hooks';
 import type { PlayStatus } from '../core/mode';
 import { load, markCleared, progress, reset, save, setCurrent, unlockedUpTo, type SaveData, type Speed } from '../core/save';
-import { QueueGame } from '../modes/queue/view/QueueGame';
+import { QueueGame, type HintView } from '../modes/queue/view/QueueGame';
 import type { QueueStage } from '../modes/queue/rules';
 import { THEMES } from '../themes';
 import queueStages from '../../stages/queue.json';
@@ -99,9 +99,11 @@ function Play({ stage, data, commit, speed, onBack, onNext }: {
   const [endFull, setEndFull] = useState(false);
   const [intro, setIntro] = useState(!!stage.intro && initial.length === 0);
   const [confirm, setConfirm] = useState(false);
+  const [hintReq, setHintReq] = useState(0);
+  const [hint, setHint] = useState<HintView>(null);
 
   const restart = () => {
-    setRun((r) => r + 1); setMoves([]); setEnd(null); setConfirm(false);
+    setRun((r) => r + 1); setMoves([]); setEnd(null); setConfirm(false); setHint(null); setHintReq(0);
     commit((d) => setCurrent(d, MODE, undefined));
   };
 
@@ -110,14 +112,33 @@ function Play({ stage, data, commit, speed, onBack, onNext }: {
       <header class="bar">
         <button class="icon" aria-label="ステージ選択へ" onClick={onBack}>←</button>
         <span class="bar-title">ステージ {stage.id}</span>
+        <button class="icon hintbtn" aria-label="ヒント" disabled={!!end || hint === 'thinking'} onClick={() => setHintReq((n) => n + 1)}>💡</button>
         <button class="icon" aria-label="最初からやり直す" onClick={() => (moves.length && !end ? setConfirm(true) : restart())}>↻</button>
       </header>
       <QueueGame key={run} stage={stage} theme={theme} speed={speed} initialMoves={run === 0 ? initial : []}
         onMove={(m) => { setMoves(m); commit((d) => setCurrent(d, MODE, { stage: stage.id, moves: m })); }}
         onEnd={(st, full) => {
-          setEnd(st); setEndFull(full);
+          setEnd(st); setEndFull(full); setHint(null);
           if (st === 'cleared') commit((d) => markCleared(d, MODE, stage.id));
-        }} />
+        }}
+        hintReq={hintReq} onHint={setHint} />
+      {hint && hint !== 'safe' && !end && (
+        <div class="hintmsg" role="status" onClick={() => hint === 'lucky' && setHint(null)}>
+          {hint === 'thinking' && '考え中…'}
+          {hint === 'lucky' && (
+            <>
+              見えているお皿だけでは確実な手がありません。この先は下から出てくるお皿しだいですが、光っているお皿を取ればクリアできます。
+              <span class="close">（タップで閉じる）</span>
+            </>
+          )}
+          {hint === 'none' && (
+            <>
+              この状態からはクリアできません。
+              <div><button class="btn primary" onClick={restart}>最初からやり直す</button></div>
+            </>
+          )}
+        </div>
+      )}
       {intro && (
         <div class="overlay soft" onClick={() => setIntro(false)}>
           <div class="card">

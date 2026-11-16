@@ -161,6 +161,42 @@ await test('演出中に連打しても、打てる手が無くなればゲー�
   await page.close();
 });
 
+await test('ヒント：💡を押すと光るお皿を取り続ければクリアできる（計算は Web Worker）', async () => {
+  const { page, errors } = await newPage();
+  await startStage(page, 12);
+  for (let i = 0; i < 200; i++) {
+    if (await page.getByText('ごちそうさま！').count()) break;
+    await page.getByRole('button', { name: 'ヒント' }).click();
+    const lit = page.locator('.item.hint');
+    await lit.waitFor({ timeout: 10000 });
+    await lit.dispatchEvent('pointerdown');
+  }
+  await page.getByText('ごちそうさま！').waitFor({ timeout: 3000 });
+  assert(errors.length === 0, errors.join('\n'));
+  await page.close();
+});
+
+await test('ヒント：もうクリアできない局面では、そう知らせてやり直しを勧める', async () => {
+  const { page } = await newPage();
+  await startStage(page, 8);
+  // 打てる手はまだあるが、もうクリアできない局面まで進める
+  const st = stages[7];
+  const moves = losingMoves(st);
+  let s = init(st);
+  const prefix: number[] = [];
+  for (const m of moves) {
+    if (!new Solver().solvable(s)) break;
+    s = apply(s, m)!; prefix.push(m);
+  }
+  assert(status(s) === 'playing' && !new Solver().solvable(s), 'テスト用の局面が作れなかった');
+  for (const m of prefix) await tapCell(page, m);
+  await page.getByRole('button', { name: 'ヒント' }).click();
+  await page.getByText('この状態からはクリアできません。').waitFor({ timeout: 10000 });
+  await page.locator('.hintmsg').getByRole('button', { name: '最初からやり直す' }).click();
+  assert(await page.locator('.item[data-col]').count() === visiblePlates(st), 'やり直しになっていない');
+  await page.close();
+});
+
 await test('途中で閉じても続きから再開できる / クリアすると次のステージが開く', async () => {
   const { page } = await newPage();
   await startStage(page, 2);

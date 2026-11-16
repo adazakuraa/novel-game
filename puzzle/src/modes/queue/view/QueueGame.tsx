@@ -6,6 +6,7 @@ import type { Speed } from '../../../core/save';
 import type { ThemeWithArt } from '../../../themes';
 import { apply, init, isLocked, legalMoves, status, topOf, type Frame, type QState, type QueueStage } from '../rules';
 import { computeLayout, ptOf, whereAll, type Layout, type Pt } from './layout';
+import { findHint, replayMoves, type Hint } from '../hint';
 
 interface Props {
   stage: QueueStage;
@@ -15,6 +16,34 @@ interface Props {
   onMove(moves: number[]): void;
   /** 終局（演出が終わってから呼ぶ）。benchFull=置き台がいっぱいで手詰まりになったか */
   onEnd(st: PlayStatus, benchFull: boolean): void;
+  /** 増えるたびにヒントを1回計算する */
+  hintReq: number;
+  /** ヒントの状態：考え中／見えている皿だけで確実な手／見えない皿しだいの手／もうクリアできない */
+  onHint(h: HintView): void;
+}
+
+export type HintView = 'thinking' | 'safe' | 'lucky' | 'none' | null;
+
+let worker: Worker | null = null;
+let workerSeq = 0;
+/** ヒントを Web Worker で計算する（使えない環境ではその場で計算） */
+function requestHint(stage: QueueStage, moves: number[]): Promise<Hint> {
+  try {
+    worker ??= new Worker(new URL('../hint.worker.ts', import.meta.url), { type: 'module' });
+  } catch {
+    return Promise.resolve(findHint(replayMoves(stage, moves)));
+  }
+  const id = ++workerSeq;
+  return new Promise((resolve) => {
+    const w = worker!;
+    const on = (e: MessageEvent<{ id: number; hint: Hint }>) => {
+      if (e.data.id !== id) return;
+      w.removeEventListener('message', on);
+      resolve(e.data.hint);
+    };
+    w.addEventListener('message', on);
+    w.postMessage({ id, stage, moves });
+  });
 }
 
 const FACTOR: Record<Speed, number> = { normal: 1, fast: 0.5, off: 0 };
@@ -32,7 +61,7 @@ function restore(stage: QueueStage, moves: number[]): { s: QState; moves: number
 
 const tf = (p: Pt) => `translate(${p.x}px, ${p.y}px) scale(${p.scale ?? 1})`;
 
-export function QueueGame({ stage, theme, speed, initialMoves, onMove, onEnd }: Props) {
+export function QueueGame({ stage, theme, speed, initialMoves, onMove, onEnd, hintReq, onHint }: Props) {
   const logic = useRef(restore(stage, initialMoves));
   const [shown, setShown] = useState<{ s: QState; frame?: Frame; dur: number }>({ s: logic.current.s, dur: 0 });
   const timers = useRef<number[]>([]);
@@ -41,6 +70,23 @@ export function QueueGame({ stage, theme, speed, initialMoves, onMove, onEnd }: 
   const [size, setSize] = useState<{ W: number; H: number } | null>(null);
   const ended = useRef(false);
   const f = FACTOR[speed];
+  // ヒント：示している列と、それが何手目の局面に対するものか
+  const [hint, setHint] = useState<{ col: number; at: number } | null>(null);
+
+  useEffect(() => {
+    if (!hintReq || ended.current) return;
+    const at = logic.current.moves.length;
+    let alive = true;
+    onHint('thinking');
+    requestHint(stage, logic.current.moves).then((h) => {
+      // 計算中に手が進んでいたら捨てる
+      if (!alive || logic.current.moves.length !== at) return;
+      if (h.kind === 'none') { setHint(null); onHint('none'); return; }
+      setHint({ col: h.col, at });
+      onHint(h.kind);
+    });
+    return () => { alive = false; };
+  }, [hintReq]);
 
   useLayoutEffect(() => {
     const el = box.current!;
@@ -116,6 +162,7 @@ export function QueueGame({ stage, theme, speed, initialMoves, onMove, onEnd }: 
     const n = apply(cur.s, col, frames);
     if (!n) { shake(id); return; }
     logic.current = { s: n, moves: [...cur.moves, col] };
+    if (hint) { setHint(null); onHint(null); }
     onMove(logic.current.moves);
     if (f === 0) { setShown({ s: n, dur: 0 }); endIfOver(); return; }
     let t = 0;
@@ -131,14 +178,15 @@ export function QueueGame({ stage, theme, speed, initialMoves, onMove, onEnd }: 
   return (
     <div class="qg" ref={box}>
       <theme.art.Defs theme={theme} />
-      {L && <Scene L={L} stage={stage} theme={theme} shown={shown} els={els.current} onTap={tap} />}
+      {L && <Scene L={L} stage={stage} theme={theme} shown={shown} els={els.current} onTap={tap}
+        hintCol={hint && hint.at === logic.current.moves.length ? hint.col : -1} />}
     </div>
   );
 }
 
-function Scene({ L, stage, theme, shown, els, onTap }: {
+function Scene({ L, stage, theme, shown, els, onTap, hintCol }: {
   L: Layout; stage: QueueStage; theme: ThemeWithArt; shown: { s: QState; frame?: Frame; dur: number };
-  els: Map<number, HTMLElement>; onTap(id: number): void;
+  els: Map<number, HTMLElement>; onTap(id: number): void; hintCol: number;
 }) {
   const { s } = shown;
   const A = theme.art;
@@ -222,6 +270,7 @@ function Scene({ L, stage, theme, shown, els, onTap }: {
         const isTop = inCol && w.p === 0;
         const locked = inCol && isLocked(s, id);
         const cls = 'item' + (isTop && can.has(id) ? ' can' : '') + (inCol && !can.has(id) ? ' blocked' : '')
+          + (isTop && w.col === hintCol ? ' hint' : '')
           + (inCol && !isTop ? ' under' : '') + (inCol && w.p >= stage.rows ? ' unseen' : '')
           + (shown.frame?.step.k === 'take' && shown.frame.step.id === id ? ' walking' : '') + (w.k === 'done' ? ' done' : '');
         return (
