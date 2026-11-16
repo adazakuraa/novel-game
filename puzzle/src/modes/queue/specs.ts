@@ -6,90 +6,94 @@ export interface Spec {
   w: number; h: number;
   colors: number;
   bench: number;
-  /** 客で埋めるマスの割合（柱・のれんを除く） */
+  /** 皿で埋めるマスの割合（のれんを除く） */
   fill: number;
-  walls?: number;
+  /** 1人のお客さんが注文する皿数の候補（既定は3） */
+  sizes?: number[];
   tunnels?: number;     // のれんの数
-  tunnelLen?: number;   // のれん1つに並ぶ客の数
-  locks?: number;       // 予約札の客の数
+  tunnelLen?: number;   // のれん1つに並ぶ皿の数
+  locks?: number;       // 予約札の皿の数
   /** 素直な打ち手の勝率の目標範囲（難易度） */
   greedy: [number, number];
   intro?: string;
 }
 
 const S = (o: Spec) => o;
+const V = [2, 3, 4];
 
 export const SPECS: Spec[] = [
-  // 1〜10：基本ルール
-  S({ w: 3, h: 4, colors: 2, bench: 5, fill: 1, greedy: [0.9, 1],
-    intro: '出口（上）まで空いたマスを通って行けるお客さんをタップ。いまの皿と同じ注文ならカウンターへ、違えば待ち席へ。待ち席が満席になったら負けです。' }),
-  S({ w: 4, h: 4, colors: 2, bench: 5, fill: 0.75, greedy: [0.8, 1] }),
-  S({ w: 4, h: 5, colors: 3, bench: 5, fill: 0.9, greedy: [0.7, 1],
-    intro: '皿が3席埋まると次の皿が出ます。待ち席に次の注文のお客さんがいれば、自動でカウンターへ移ります。' }),
-  S({ w: 5, h: 5, colors: 3, bench: 5, fill: 0.84, greedy: [0.6, 0.95] }),
-  S({ w: 5, h: 5, colors: 3, bench: 5, fill: 0.96, greedy: [0.5, 0.9] }),
-  S({ w: 5, h: 6, colors: 4, bench: 5, fill: 0.9, greedy: [0.5, 0.85] }),
-  S({ w: 5, h: 6, colors: 4, bench: 5, fill: 1, greedy: [0.4, 0.8] }),
-  S({ w: 6, h: 6, colors: 4, bench: 5, fill: 0.92, greedy: [0.35, 0.75] }),
-  S({ w: 6, h: 6, colors: 4, bench: 5, fill: 1, greedy: [0.3, 0.7] }),
-  S({ w: 6, h: 6, colors: 5, bench: 5, fill: 1, greedy: [0.25, 0.6] }),
-  // 11〜20：柱
-  S({ w: 5, h: 5, colors: 3, bench: 5, fill: 1, walls: 3, greedy: [0.6, 1], intro: '柱のマスは通れません。' }),
-  S({ w: 5, h: 6, colors: 3, bench: 5, fill: 1, walls: 3, greedy: [0.45, 0.9] }),
-  S({ w: 6, h: 6, colors: 4, bench: 5, fill: 1, walls: 3, greedy: [0.35, 0.8] }),
-  S({ w: 6, h: 6, colors: 4, bench: 5, fill: 1, walls: 4, greedy: [0.3, 0.7] }),
-  S({ w: 6, h: 7, colors: 4, bench: 5, fill: 1, walls: 3, greedy: [0.25, 0.65] }),
-  S({ w: 6, h: 7, colors: 5, bench: 5, fill: 1, walls: 4, greedy: [0.2, 0.6] }),
-  S({ w: 6, h: 7, colors: 5, bench: 5, fill: 1, walls: 5, greedy: [0.15, 0.55] }),
-  S({ w: 7, h: 7, colors: 5, bench: 5, fill: 1, walls: 4, greedy: [0.12, 0.5] }),
-  S({ w: 7, h: 7, colors: 5, bench: 5, fill: 1, walls: 6, greedy: [0.1, 0.45] }),
-  S({ w: 7, h: 7, colors: 6, bench: 5, fill: 1, walls: 5, greedy: [0.08, 0.4] }),
-  // 21〜30：待ち席が4席
-  S({ w: 5, h: 5, colors: 3, bench: 4, fill: 1, greedy: [0.5, 1], intro: 'このステージから待ち席は4席。4席目が埋まると負けです。' }),
-  S({ w: 5, h: 6, colors: 3, bench: 4, fill: 1, walls: 2, greedy: [0.4, 0.85] }),
-  S({ w: 6, h: 6, colors: 4, bench: 4, fill: 1, walls: 2, greedy: [0.3, 0.75] }),
-  S({ w: 6, h: 6, colors: 4, bench: 4, fill: 1, walls: 3, greedy: [0.25, 0.65] }),
-  S({ w: 6, h: 7, colors: 4, bench: 4, fill: 1, walls: 3, greedy: [0.2, 0.6] }),
-  S({ w: 6, h: 7, colors: 5, bench: 4, fill: 1, walls: 3, greedy: [0.15, 0.55] }),
-  S({ w: 6, h: 7, colors: 5, bench: 4, fill: 1, walls: 4, greedy: [0.12, 0.5] }),
-  S({ w: 7, h: 7, colors: 5, bench: 4, fill: 1, walls: 4, greedy: [0.1, 0.45] }),
-  S({ w: 7, h: 7, colors: 5, bench: 4, fill: 1, walls: 5, greedy: [0.08, 0.4] }),
-  S({ w: 7, h: 8, colors: 5, bench: 4, fill: 1, walls: 5, greedy: [0.05, 0.35] }),
+  // 1〜10：基本ルール（注文はいつも3皿）
+  S({ w: 3, h: 3, colors: 2, bench: 4, fill: 1, greedy: [0.9, 1],
+    intro: 'カウンターのお客さんが「このお寿司を○皿ほしい」と待っています。上が空いているお皿をタップすると、注文に合えばお客さんへ、合わなければ置き台へ。お皿は真上にしか動けません。打てる手がなくなったらゲームオーバーです。' }),
+  S({ w: 4, h: 3, colors: 2, bench: 4, fill: 1, greedy: [0.8, 1] }),
+  S({ w: 4, h: 4, colors: 3, bench: 4, fill: 0.95, greedy: [0.7, 1],
+    intro: '注文がそろうとお客さんが帰り、次のお客さんが座ります。置き台に注文どおりのお皿があれば、自動で渡します。' }),
+  S({ w: 5, h: 4, colors: 3, bench: 4, fill: 0.95, greedy: [0.6, 0.95] }),
+  S({ w: 5, h: 4, colors: 3, bench: 4, fill: 1, greedy: [0.5, 0.9] }),
+  S({ w: 5, h: 5, colors: 3, bench: 5, fill: 1, greedy: [0.4, 0.85] }),
+  S({ w: 5, h: 5, colors: 4, bench: 5, fill: 1, greedy: [0.3, 0.7] }),
+  S({ w: 6, h: 4, colors: 4, bench: 5, fill: 1, greedy: [0.25, 0.65] }),
+  S({ w: 5, h: 5, colors: 4, bench: 5, fill: 1, greedy: [0.2, 0.55] }),
+  S({ w: 6, h: 5, colors: 4, bench: 5, fill: 1, greedy: [0.1, 0.45] }),
+  // 11〜20：注文の皿数がいろいろ（2〜4皿）
+  S({ w: 4, h: 4, colors: 3, bench: 4, fill: 1, sizes: V, greedy: [0.6, 1],
+    intro: 'これからは、お客さんによって注文する皿数が違います。' }),
+  S({ w: 5, h: 4, colors: 3, bench: 4, fill: 1, sizes: V, greedy: [0.45, 0.9] }),
+  S({ w: 5, h: 5, colors: 3, bench: 5, fill: 1, sizes: V, greedy: [0.35, 0.8] }),
+  S({ w: 5, h: 5, colors: 4, bench: 5, fill: 1, sizes: V, greedy: [0.25, 0.7] }),
+  S({ w: 6, h: 4, colors: 4, bench: 5, fill: 1, sizes: V, greedy: [0.2, 0.6] }),
+  S({ w: 6, h: 5, colors: 4, bench: 5, fill: 1, sizes: V, greedy: [0.12, 0.5] }),
+  S({ w: 6, h: 5, colors: 4, bench: 5, fill: 1, sizes: V, greedy: [0.08, 0.4] }),
+  S({ w: 6, h: 6, colors: 5, bench: 6, fill: 1, sizes: V, greedy: [0.05, 0.35] }),
+  S({ w: 7, h: 5, colors: 5, bench: 6, fill: 1, sizes: V, greedy: [0.03, 0.3] }),
+  S({ w: 7, h: 6, colors: 5, bench: 6, fill: 1, sizes: V, greedy: [0.02, 0.25] }),
+  // 21〜30：置き台が少ない
+  S({ w: 4, h: 4, colors: 3, bench: 3, fill: 1, greedy: [0.5, 1],
+    intro: 'このステージから置き台は3つ。置き台がいっぱいのときは、注文に合うお皿しか取れません。' }),
+  S({ w: 5, h: 4, colors: 3, bench: 3, fill: 1, sizes: V, greedy: [0.35, 0.85] }),
+  S({ w: 5, h: 5, colors: 3, bench: 4, fill: 1, sizes: V, greedy: [0.25, 0.75] }),
+  S({ w: 5, h: 5, colors: 4, bench: 4, fill: 1, sizes: V, greedy: [0.2, 0.65] }),
+  S({ w: 6, h: 4, colors: 4, bench: 4, fill: 1, sizes: V, greedy: [0.15, 0.55] }),
+  S({ w: 6, h: 5, colors: 4, bench: 4, fill: 1, sizes: V, greedy: [0.1, 0.45] }),
+  S({ w: 6, h: 5, colors: 4, bench: 4, fill: 1, sizes: V, greedy: [0.06, 0.4] }),
+  S({ w: 6, h: 6, colors: 5, bench: 5, fill: 1, sizes: V, greedy: [0.04, 0.3] }),
+  S({ w: 7, h: 5, colors: 5, bench: 5, fill: 1, sizes: V, greedy: [0.02, 0.25] }),
+  S({ w: 7, h: 6, colors: 5, bench: 5, fill: 1, sizes: V, greedy: [0.01, 0.2] }),
   // 31〜40：のれん
-  S({ w: 5, h: 5, colors: 3, bench: 5, fill: 1, tunnels: 1, tunnelLen: 3, greedy: [0.5, 1],
-    intro: 'のれんの前のマスが空くと、のれんに見えている順番でお客さんが出てきます。' }),
-  S({ w: 5, h: 6, colors: 3, bench: 5, fill: 1, tunnels: 1, tunnelLen: 4, walls: 1, greedy: [0.4, 0.9] }),
-  S({ w: 6, h: 6, colors: 4, bench: 5, fill: 1, tunnels: 1, tunnelLen: 4, walls: 2, greedy: [0.3, 0.8] }),
-  S({ w: 6, h: 6, colors: 4, bench: 5, fill: 1, tunnels: 2, tunnelLen: 3, walls: 2, greedy: [0.25, 0.7] }),
-  S({ w: 6, h: 7, colors: 4, bench: 5, fill: 1, tunnels: 2, tunnelLen: 4, walls: 2, greedy: [0.2, 0.6] }),
-  S({ w: 6, h: 7, colors: 5, bench: 5, fill: 1, tunnels: 2, tunnelLen: 4, walls: 3, greedy: [0.15, 0.55] }),
-  S({ w: 6, h: 7, colors: 5, bench: 4, fill: 1, tunnels: 1, tunnelLen: 4, walls: 3, greedy: [0.12, 0.5] }),
-  S({ w: 7, h: 7, colors: 5, bench: 5, fill: 1, tunnels: 2, tunnelLen: 4, walls: 4, greedy: [0.1, 0.45] }),
-  S({ w: 7, h: 7, colors: 5, bench: 5, fill: 1, tunnels: 2, tunnelLen: 3, walls: 5, greedy: [0.08, 0.4] }),
-  S({ w: 7, h: 8, colors: 6, bench: 5, fill: 1, tunnels: 2, tunnelLen: 4, walls: 4, greedy: [0.05, 0.35] }),
+  S({ w: 4, h: 4, colors: 3, bench: 4, fill: 1, tunnels: 1, tunnelLen: 3, greedy: [0.5, 1],
+    intro: 'のれんの上のマスが空くと、のれんに見えている順番でお皿が出てきます。' }),
+  S({ w: 5, h: 4, colors: 3, bench: 4, fill: 1, sizes: V, tunnels: 1, tunnelLen: 3, greedy: [0.35, 0.9] }),
+  S({ w: 5, h: 5, colors: 3, bench: 5, fill: 1, sizes: V, tunnels: 1, tunnelLen: 4, greedy: [0.25, 0.8] }),
+  S({ w: 5, h: 5, colors: 4, bench: 5, fill: 1, sizes: V, tunnels: 2, tunnelLen: 3, greedy: [0.2, 0.7] }),
+  S({ w: 6, h: 4, colors: 4, bench: 5, fill: 1, sizes: V, tunnels: 2, tunnelLen: 3, greedy: [0.15, 0.6] }),
+  S({ w: 6, h: 5, colors: 4, bench: 5, fill: 1, sizes: V, tunnels: 2, tunnelLen: 4, greedy: [0.1, 0.5] }),
+  S({ w: 6, h: 5, colors: 4, bench: 4, fill: 1, sizes: V, tunnels: 1, tunnelLen: 4, greedy: [0.06, 0.4] }),
+  S({ w: 6, h: 6, colors: 5, bench: 6, fill: 1, sizes: V, tunnels: 2, tunnelLen: 4, greedy: [0.04, 0.3] }),
+  S({ w: 7, h: 5, colors: 5, bench: 6, fill: 1, sizes: V, tunnels: 2, tunnelLen: 3, greedy: [0.02, 0.25] }),
+  S({ w: 7, h: 6, colors: 5, bench: 6, fill: 1, sizes: V, tunnels: 3, tunnelLen: 3, greedy: [0.01, 0.2] }),
   // 41〜50：予約札
-  S({ w: 5, h: 5, colors: 3, bench: 5, fill: 1, locks: 2, greedy: [0.5, 1],
-    intro: '札のついたお客さんは、札の数だけ皿が下がるまで動けません。' }),
-  S({ w: 5, h: 6, colors: 3, bench: 5, fill: 1, locks: 3, walls: 1, greedy: [0.4, 0.9] }),
-  S({ w: 6, h: 6, colors: 4, bench: 5, fill: 1, locks: 3, walls: 2, greedy: [0.3, 0.8] }),
-  S({ w: 6, h: 6, colors: 4, bench: 5, fill: 1, locks: 4, walls: 2, greedy: [0.25, 0.7] }),
-  S({ w: 6, h: 7, colors: 4, bench: 4, fill: 1, locks: 3, walls: 3, greedy: [0.2, 0.6] }),
-  S({ w: 6, h: 7, colors: 5, bench: 5, fill: 1, locks: 4, walls: 3, tunnels: 1, tunnelLen: 3, greedy: [0.15, 0.55] }),
-  S({ w: 6, h: 7, colors: 5, bench: 4, fill: 1, locks: 4, walls: 3, greedy: [0.12, 0.5] }),
-  S({ w: 7, h: 7, colors: 5, bench: 5, fill: 1, locks: 5, walls: 4, tunnels: 1, tunnelLen: 4, greedy: [0.1, 0.45] }),
-  S({ w: 7, h: 7, colors: 5, bench: 4, fill: 1, locks: 4, walls: 4, greedy: [0.08, 0.4] }),
-  S({ w: 7, h: 8, colors: 6, bench: 5, fill: 1, locks: 5, walls: 4, tunnels: 1, tunnelLen: 4, greedy: [0.05, 0.35] }),
-  // 51〜60：総仕上げ（高難易度）
-  S({ w: 7, h: 8, colors: 5, bench: 5, fill: 1, walls: 5, tunnels: 1, tunnelLen: 4, locks: 2, greedy: [0.05, 0.3] }),
-  S({ w: 7, h: 8, colors: 6, bench: 5, fill: 1, walls: 5, tunnels: 2, tunnelLen: 3, greedy: [0.04, 0.3] }),
-  S({ w: 7, h: 8, colors: 6, bench: 4, fill: 1, walls: 5, locks: 3, greedy: [0.03, 0.25] }),
-  S({ w: 7, h: 8, colors: 6, bench: 5, fill: 1, walls: 6, tunnels: 2, tunnelLen: 4, locks: 3, greedy: [0.03, 0.25] }),
-  S({ w: 7, h: 9, colors: 6, bench: 5, fill: 1, walls: 6, tunnels: 1, tunnelLen: 4, locks: 3, greedy: [0.02, 0.2] }),
-  S({ w: 7, h: 8, colors: 6, bench: 5, fill: 1, walls: 6, tunnels: 2, tunnelLen: 3, locks: 2, greedy: [0.006, 0.12] }),
-  S({ w: 7, h: 8, colors: 6, bench: 5, fill: 1, walls: 5, tunnels: 2, tunnelLen: 4, locks: 3, greedy: [0.006, 0.12] }),
-  S({ w: 7, h: 9, colors: 6, bench: 5, fill: 1, walls: 6, tunnels: 1, tunnelLen: 4, locks: 3, greedy: [0.006, 0.1] }),
-  S({ w: 7, h: 9, colors: 6, bench: 5, fill: 1, walls: 7, tunnels: 2, tunnelLen: 3, locks: 3, greedy: [0.006, 0.1] }),
-  S({ w: 7, h: 9, colors: 6, bench: 5, fill: 1, walls: 6, tunnels: 2, tunnelLen: 3, locks: 4, greedy: [0.006, 0.1] }),
+  S({ w: 4, h: 4, colors: 3, bench: 4, fill: 1, locks: 2, greedy: [0.5, 1],
+    intro: '札のついたお皿は、札の数だけお客さんが帰るまで取れません。' }),
+  S({ w: 5, h: 4, colors: 3, bench: 4, fill: 1, sizes: V, locks: 2, greedy: [0.35, 0.9] }),
+  S({ w: 5, h: 5, colors: 3, bench: 5, fill: 1, sizes: V, locks: 3, greedy: [0.25, 0.8] }),
+  S({ w: 5, h: 5, colors: 4, bench: 5, fill: 1, sizes: V, locks: 3, greedy: [0.2, 0.7] }),
+  S({ w: 6, h: 4, colors: 4, bench: 5, fill: 1, sizes: V, locks: 3, greedy: [0.15, 0.6] }),
+  S({ w: 6, h: 5, colors: 4, bench: 5, fill: 1, sizes: V, tunnels: 1, tunnelLen: 3, locks: 3, greedy: [0.1, 0.5] }),
+  S({ w: 6, h: 5, colors: 4, bench: 4, fill: 1, sizes: V, locks: 3, greedy: [0.06, 0.4] }),
+  S({ w: 6, h: 6, colors: 5, bench: 6, fill: 1, sizes: V, tunnels: 1, tunnelLen: 4, locks: 4, greedy: [0.04, 0.3] }),
+  S({ w: 7, h: 5, colors: 5, bench: 6, fill: 1, sizes: V, locks: 4, greedy: [0.02, 0.25] }),
+  S({ w: 7, h: 6, colors: 5, bench: 6, fill: 1, sizes: V, tunnels: 1, tunnelLen: 4, locks: 4, greedy: [0.01, 0.2] }),
+  // 51〜60：総仕上げ（素直に打つだけではほぼ勝てない。解けること・複数解法・罠の上限は保証）
+  S({ w: 6, h: 6, colors: 5, bench: 6, fill: 1, sizes: V, tunnels: 1, tunnelLen: 4, locks: 2, greedy: [0, 0.15] }),
+  S({ w: 7, h: 5, colors: 5, bench: 5, fill: 1, sizes: V, tunnels: 2, tunnelLen: 3, locks: 2, greedy: [0, 0.15] }),
+  S({ w: 7, h: 6, colors: 5, bench: 6, fill: 1, sizes: V, tunnels: 2, tunnelLen: 3, locks: 3, greedy: [0, 0.12] }),
+  S({ w: 7, h: 6, colors: 5, bench: 5, fill: 1, sizes: V, tunnels: 1, tunnelLen: 4, locks: 3, greedy: [0, 0.12] }),
+  S({ w: 7, h: 6, colors: 6, bench: 6, fill: 1, sizes: V, tunnels: 2, tunnelLen: 4, locks: 3, greedy: [0, 0.1] }),
+  S({ w: 7, h: 7, colors: 5, bench: 6, fill: 1, sizes: V, tunnels: 1, tunnelLen: 4, locks: 3, greedy: [0, 0.1] }),
+  S({ w: 7, h: 7, colors: 5, bench: 6, fill: 1, sizes: V, tunnels: 2, tunnelLen: 3, locks: 4, greedy: [0, 0.08] }),
+  S({ w: 7, h: 7, colors: 6, bench: 6, fill: 1, sizes: V, tunnels: 2, tunnelLen: 4, locks: 3, greedy: [0, 0.08] }),
+  S({ w: 7, h: 7, colors: 6, bench: 6, fill: 1, sizes: V, tunnels: 2, tunnelLen: 4, locks: 4, greedy: [0, 0.06] }),
+  S({ w: 7, h: 7, colors: 6, bench: 6, fill: 1, sizes: V, tunnels: 3, tunnelLen: 3, locks: 4, greedy: [0, 0.05] }),
 ];
 
 /** 品質の計測条件（生成と全ステージ検証で同じにする） */

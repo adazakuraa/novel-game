@@ -1,9 +1,7 @@
 // ゲームモード共通の型。モード固有のロジック（modes/*）と、共通UI・ステージ管理・保存（core, ui）をつなぐ。
 
-export type PlayStatus = 'playing' | 'cleared' | 'full' | 'stuck';
-
-/** 失敗の種類。'full' 待ち席が満席 / 'stuck' 打てる手が無い */
-export const isFailed = (s: PlayStatus) => s === 'full' || s === 'stuck';
+/** 'stuck'＝打てる手が無い（ゲームオーバー） */
+export type PlayStatus = 'playing' | 'cleared' | 'stuck';
 
 export interface GameMode<Stage, State, Move> {
   id: string;

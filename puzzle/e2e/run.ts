@@ -5,7 +5,7 @@ import { preview } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { rng } from '../src/core/mode';
 import { apply, init, legalMoves, status, type QueueStage } from '../src/modes/queue/rules';
-import { greedyPolicy, Solver } from '../src/modes/queue/solver';
+import { Solver } from '../src/modes/queue/solver';
 import data from '../stages/queue.json';
 
 const stages = data as QueueStage[];
@@ -33,7 +33,7 @@ async function newPage(device = devices['iPhone 13']) {
 async function setProgress(page: Page, cleared: number[], current?: unknown) {
   await page.evaluate(([c, cur]) => localStorage.setItem('omachido.v1', JSON.stringify({ v: 1, modes: { queue: { cleared: c, current: cur } }, settings: { speed: 'normal' } })), [cleared, current] as const);
 }
-const tapCell = (page: Page, cell: number) => page.locator(`.cust[data-cell="${cell}"]`).dispatchEvent('pointerdown');
+const tapCell = (page: Page, cell: number) => page.locator(`.item[data-cell="${cell}"]`).dispatchEvent('pointerdown');
 async function startStage(page: Page, n: number, q = '?anim=0') {
   await page.goto(url + q);
   await setProgress(page, Array.from({ length: n - 1 }, (_, i) => i + 1));
@@ -59,7 +59,7 @@ await test('最大のステージでも盤面が画面内に収まり、ボタ�
     const { page } = await newPage(dev);
     await startStage(page, stages.length);
     const r = await page.evaluate(() => {
-      const vis = [...document.querySelectorAll('.cust[data-cell]')].map((e) => e.getBoundingClientRect());
+      const vis = [...document.querySelectorAll('.item[data-cell]')].map((e) => e.getBoundingClientRect());
       const btn = [...document.querySelectorAll('button')].map((e) => e.getBoundingClientRect());
       return {
         maxRight: Math.max(...vis.map((b) => b.right)), maxBottom: Math.max(...vis.map((b) => b.bottom)),
@@ -68,13 +68,13 @@ await test('最大のステージでも盤面が画面内に収まり、ボタ�
       };
     });
     assert(r.maxRight <= r.W && r.maxBottom <= r.H, `盤面がはみ出している ${JSON.stringify(r)}`);
-    assert(r.minCust >= 30, `お客さんが小さすぎる ${r.minCust}px`);
+    assert(r.minCust >= 30, `お皿が小さすぎる ${r.minCust}px`);
     assert(r.minBtn >= 44, `ボタンが小さすぎる ${r.minBtn}px`);
     await page.close();
   }
 });
 
-await test('遊び方の説明 → タップでお客さんが動く → 動けないお客さんは動かない', async () => {
+await test('遊び方の説明 → タップでお皿が動く → 取れないお皿は動かない', async () => {
   const { page, errors } = await newPage();
   await page.goto(url + '?anim=0');
   await page.getByRole('button', { name: 'ステージ 1 から' }).click();
@@ -83,10 +83,10 @@ await test('遊び方の説明 → タップでお客さんが動く → 動け�
   const s0 = init(stages[0]);
   const blocked = s0.board.findIndex((id, i) => id >= 0 && !legalMoves(s0).includes(i));
   await tapCell(page, blocked);
-  assert(await page.locator(`.cust[data-cell="${blocked}"]`).count() === 1, '動けないお客さんが動いた');
+  assert(await page.locator(`.item[data-cell="${blocked}"]`).count() === 1, '取れないお皿が動いた');
   const mv = legalMoves(s0)[0];
   await tapCell(page, mv);
-  assert(await page.locator(`.cust[data-cell="${mv}"]`).count() === 0, 'タップしたお客さんが盤面に残っている');
+  assert(await page.locator(`.item[data-cell="${mv}"]`).count() === 0, 'タップしたお皿が盤面に残っている');
   assert(errors.length === 0, errors.join('\n'));
   await page.close();
 });
@@ -101,25 +101,42 @@ await test('演出ありで素早く連打してもクリアできる（演出�
   await page.close();
 });
 
-await test('負け → 「最初からやり直す」で初期の盤面に戻る', async () => {
+/** 打てる手が無くなるまで進む手順（無作為に打って、負ける手順が見つかるまで探す） */
+function losingMoves(st: QueueStage): number[] {
+  for (let seed = 1; seed < 500; seed++) {
+    const r = rng(seed);
+    let s = init(st);
+    const out: number[] = [];
+    for (let moves = legalMoves(s); moves.length; moves = legalMoves(s)) {
+      const m = r.pick(moves);
+      out.push(m);
+      s = apply(s, m)!;
+    }
+    if (status(s) === 'stuck') return out;
+  }
+  throw new Error('負ける手順が見つからない');
+}
+
+await test('打てる手が無くなるとゲームオーバー → 「最初からやり直す」で初期の盤面に戻る', async () => {
   const { page } = await newPage();
   await startStage(page, 8);
   const st = stages[7];
-  const r = rng(3);
-  let s = init(st);
-  for (let i = 0; i < 200 && status(s) === 'playing'; i++) {
-    // わざと待ち席にためて負ける
-    const moves = legalMoves(s);
-    const bad = moves.filter((m) => s.custs[s.board[m]].c !== st.dishes[s.dish]);
-    const m = bad.length ? bad[0] : greedyPolicy(s, moves, r);
-    s = apply(s, m)!;
-    await tapCell(page, m);
-  }
-  assert(status(s) === 'full' || status(s) === 'stuck', 'テストの手順で負けにならなかった');
-  await page.getByText(status(s) === 'full' ? '待ち席が満席になりました' : '動かせるお客さんがいません').waitFor();
+  for (const m of losingMoves(st)) await tapCell(page, m);
+  await page.getByText('ゲームオーバー').waitFor();
   await page.locator('.card').getByRole('button', { name: '最初からやり直す' }).click();
-  const n = await page.locator('.cust[data-cell]').count();
-  assert(n === init(st).board.filter((v) => v >= 0).length, `やり直し後のお客さんの数が違う ${n}`);
+  const n = await page.locator('.item[data-cell]').count();
+  assert(n === init(st).board.filter((v) => v >= 0).length, `やり直し後のお皿の数が違う ${n}`);
+  await page.close();
+});
+
+await test('演出中に連打しても、打てる手が無くなればゲームオーバーになる', async () => {
+  const { page } = await newPage();
+  await startStage(page, 8, '');
+  const moves = losingMoves(stages[7]);
+  for (const m of moves) { await tapCell(page, m); await page.waitForTimeout(20); }
+  // 最後の手の演出中に、取れないお皿をさらにタップする
+  await page.locator('.item.blocked').first().dispatchEvent('pointerdown').catch(() => {});
+  await page.getByText('ゲームオーバー').waitFor({ timeout: 4000 });
   await page.close();
 });
 
@@ -130,7 +147,7 @@ await test('途中で閉じても続きから再開できる / クリアする�
   await tapCell(page, sol[0]); await tapCell(page, sol[1]);
   await page.reload();
   await page.getByRole('button', { name: 'つづきから（ステージ 2）' }).click();
-  assert(await page.locator(`.cust[data-cell="${sol[0]}"]`).count() === 0, '再開時に手順が戻っていない');
+  assert(await page.locator(`.item[data-cell="${sol[0]}"]`).count() === 0, '再開時に手順が戻っていない');
   for (const c of sol.slice(2)) await tapCell(page, c);
   await page.getByText('ごちそうさま！').waitFor();
   await page.locator('.card').getByRole('button', { name: 'ステージ選択' }).click();
