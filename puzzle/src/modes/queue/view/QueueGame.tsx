@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import type { PlayStatus } from '../../../core/mode';
 import type { Speed } from '../../../core/save';
 import type { ThemeWithArt } from '../../../themes';
-import { apply, init, isLocked, legalMoves, status, type Frame, type QState, type QueueStage } from '../rules';
+import { apply, init, isLocked, legalMoves, status, topOf, type Frame, type QState, type QueueStage } from '../rules';
 import { computeLayout, ptOf, whereAll, type Layout, type Pt } from './layout';
 
 interface Props {
@@ -58,19 +58,16 @@ export function QueueGame({ stage, theme, speed, initialMoves, onMove, onEnd }: 
     return () => timers.current.forEach(clearTimeout);
   }, []);
 
-  // 皿が真上へ抜けて、カウンター（または置き台）へ運ばれる演出
+  // 皿が列の上へ抜けて、お客さんの前（または置き台）へ運ばれる演出
   useLayoutEffect(() => {
     const fr = shown.frame;
-    if (!L || !fr || fr.step.k !== 'walk' || f === 0) return;
+    if (!L || !fr || fr.step.k !== 'take' || f === 0) return;
     const el = els.current.get(fr.step.id);
     if (!el) return;
-    const path = fr.step.path.map((c) => L.cell(c));
-    const top = path[path.length - 1];
-    const exit = { x: top.x, y: L.board.y - L.s * 0.9 };
+    const from = L.inCol(fr.step.col, 0);
+    const exit = { x: from.x, y: L.board.y - L.s * 0.9 };
     const dest = ptOf(L, whereAll(fr.state)[fr.step.id]);
-    const pts = [path[0], top, exit, dest];
-    const offsets = [0, 0.45, 0.6, 1];
-    el.animate(pts.map((p, i) => ({ transform: tf(p), offset: offsets[i] })), { duration: shown.dur, easing: 'ease-in-out' });
+    el.animate([from, exit, dest].map((p, i) => ({ transform: tf(p), offset: [0, 0.35, 1][i] })), { duration: shown.dur, easing: 'ease-in-out' });
   }, [shown]);
 
   function endIfOver() {
@@ -93,9 +90,9 @@ export function QueueGame({ stage, theme, speed, initialMoves, onMove, onEnd }: 
 
   function durOf(fr: Frame): number {
     switch (fr.step.k) {
-      case 'walk': return (fr.step.path.length * 45 + 320) * f;
-      case 'spawn': return 220 * f;
-      case 'orderDone': return 480 * f;
+      case 'take': return 420 * f;
+      case 'leave': return 420 * f;
+      case 'sit': return 300 * f;
       case 'pull': return 280 * f;
     }
   }
@@ -113,12 +110,12 @@ export function QueueGame({ stage, theme, speed, initialMoves, onMove, onEnd }: 
     finish();
     if (ended.current) return;
     const cur = logic.current;
-    const cell = cur.s.board.indexOf(id);
-    if (cell < 0) return;
+    const col = cur.s.items[id].col;
+    if (topOf(cur.s, col) !== id) { shake(id); return; }
     const frames: Frame[] = [];
-    const n = apply(cur.s, cell, frames);
+    const n = apply(cur.s, col, frames);
     if (!n) { shake(id); return; }
-    logic.current = { s: n, moves: [...cur.moves, cell] };
+    logic.current = { s: n, moves: [...cur.moves, col] };
     onMove(logic.current.moves);
     if (f === 0) { setShown({ s: n, dur: 0 }); endIfOver(); return; }
     let t = 0;
@@ -146,84 +143,96 @@ function Scene({ L, stage, theme, shown, els, onTap }: {
   const { s } = shown;
   const A = theme.art;
   const where = whereAll(s);
-  const can = new Set(legalMoves(s));
+  const can = new Set(legalMoves(s).map((col) => topOf(s, col)));
+  const playing = s.served < stage.orders.length;
   const benchFull = s.bench.length >= stage.bench;
-  const remaining = stage.orders.length - s.order;
-  const cur = stage.orders[s.order];
   const sz = L.s;
-  const leaving = shown.frame?.step.k === 'orderDone' ? shown.frame.step : null;
+  const leaving = shown.frame?.step.k === 'leave' ? shown.frame.step : null;
+  const waiting = stage.orders.length - s.next;
+  const seatOf = new Map(s.seats.map((x, i) => [x.order, i] as const));
 
   return (
     <div class="scene" style={{ '--t': `${shown.dur}ms` }}>
       {/* カウンター */}
       <div class="counter" style={{ left: `${L.counter.x}px`, top: `${L.counter.y}px`, width: `${L.counter.w}px`, height: `${L.counter.h}px` }} />
-      {Array.from({ length: L.maxN }, (_, i) => {
-        const p = L.seat(i);
-        const on = !!cur && i < cur.n;
+      {s.seats.map((seat, si) => Array.from({ length: L.maxN }, (_, i) => {
+        const p = L.slot(si, i);
+        const on = seat.order >= 0 && i < stage.orders[seat.order].n;
         return <div class={'mat' + (on ? '' : ' off')} style={{ left: `${p.x}px`, top: `${p.y}px`, width: `${sz}px`, height: `${sz}px` }} />;
-      })}
+      }))}
       <div class="label" style={{ left: `${L.strip.x}px`, top: `${L.strip.y}px` }}>
-        {theme.words.next}（{Math.max(0, remaining - 1)}人）
+        {theme.words.next}（{waiting}人）
       </div>
       {/* 置き台 */}
-      <div class={'benchbox' + (benchFull && cur ? ' full' : '')}
+      <div class={'benchbox' + (benchFull && playing ? ' full' : '')}
         style={{ left: `${L.benchBox.x}px`, top: `${L.benchBox.y}px`, width: `${L.benchBox.w}px`, height: `${L.benchBox.h}px` }}>
-        <span class="benchlabel">{theme.words.bench} {s.bench.length}/{stage.bench}{benchFull && cur ? ' ・いっぱい（注文に合うお皿だけ取れます）' : ''}</span>
+        <span class="benchlabel">{theme.words.bench} {s.bench.length}/{stage.bench}{benchFull && playing ? ' ・いっぱい（注文に合うお皿だけ取れます）' : ''}</span>
       </div>
       {Array.from({ length: stage.bench }, (_, j) => {
         const p = L.bench(j);
         return <div class="slot" style={{ left: `${p.x}px`, top: `${p.y}px`, width: `${sz}px`, height: `${sz}px` }} />;
       })}
-      {/* 盤面 */}
+      {/* 盤面と厨房 */}
       <div class="exit" style={{ left: `${L.board.x}px`, top: `${L.board.y - sz * 0.42}px`, width: `${L.board.w}px`, height: `${sz * 0.42}px` }}>
         ▲ {theme.words.exit} ▲
       </div>
-      <div class="board" style={{ left: `${L.board.x}px`, top: `${L.board.y}px`, width: `${L.board.w}px`, height: `${L.board.h}px`, '--w': stage.w, '--h': stage.h }} />
-      {stage.cells.map((c, i) => {
-        if (!c || 'c' in c) return null;
-        const p = L.cell(i);
-        const st = { left: `${p.x}px`, top: `${p.y}px`, width: `${sz}px`, height: `${sz}px` };
-        if ('wall' in c) return <div class="wall" style={st} />;
-        const t = s.tunnels.find((x) => x.cell === i)!;
-        const q = t.ids.slice(t.next).map((id) => s.items[id].c);
-        return <div class="tunnel" style={st} aria-label={`のれん：あと${q.length}皿`}><A.Noren theme={theme} queue={q} dir={c.tunnel} /></div>;
+      <div class="board" style={{ left: `${L.board.x}px`, top: `${L.board.y}px`, width: `${L.board.w}px`, height: `${L.board.h}px`, '--w': stage.cols.length, '--h': stage.rows }} />
+      {L.kitchen && (
+        <div class="kitchen" style={{ left: `${L.kitchen.x}px`, top: `${L.kitchen.y}px`, width: `${L.kitchen.w}px`, height: `${L.kitchen.h}px` }} />
+      )}
+      {L.kitchen && s.colIds.map((ids, col) => {
+        const hidden = Math.max(0, ids.length - s.top[col] - stage.rows);
+        return (
+          <div class="colcount" style={{ left: `${L.board.x + col * sz}px`, top: `${L.kitchen!.y}px`, width: `${sz}px`, height: `${L.kitchen!.h}px`, fontSize: `${Math.round(sz * 0.24)}px` }}>
+            {hidden ? `あと${hidden}` : ''}
+          </div>
+        );
       })}
       {/* お客さん（注文） */}
       {stage.orders.map((o, d) => {
-        if (d < s.order - 1) return null;
-        if (d === s.order - 1 && leaving?.order !== d) return null;
+        const seat = seatOf.get(d);
         let p: Pt;
-        if (d < s.order) p = { ...L.gone, y: L.guest.y };
-        else if (d === s.order) p = L.guest;
-        else p = { ...L.chip(d - s.order - 1), scale: L.chipSize / L.guestSize };
-        const isCur = d === s.order;
+        let isCur = false;
+        if (seat !== undefined) { p = L.guest(seat); isCur = true; }
+        else if (d >= s.next) p = { ...L.chip(d - s.next), scale: L.chipSize / L.guestSize };
+        else if (leaving?.order === d) p = { ...L.gone(leaving.seat) };
+        else return null;
+        const got = seat !== undefined ? s.seats[seat].got.length : 0;
         return (
           <div key={`o${d}`} class={'guest' + (isCur ? ' current' : '')} data-order={d}
             aria-label={`${theme.kinds[o.c].name}を${o.n}皿ほしいお客さん`}
             style={{ width: `${L.guestSize}px`, height: `${L.guestSize}px`, transform: tf(p), opacity: p.opacity ?? 1 }}>
             <A.Customer theme={theme} kind={o.c} />
-            <span class="want" style={{ fontSize: `${Math.round(L.guestSize * (isCur ? 0.2 : 0.3))}px` }}>{isCur ? `${s.got.length}/${o.n}` : `×${o.n}`}</span>
+            <span class="want" style={{ fontSize: `${Math.round(L.guestSize * (isCur ? 0.2 : 0.3))}px` }}>
+              <span class="wantplate"><A.Plate theme={theme} kind={o.c} /></span>
+              {isCur ? `${got}/${o.n}` : `×${o.n}`}
+            </span>
           </div>
         );
       })}
       {/* お皿 */}
       {s.items.map((it, id) => {
         const w = where[id];
-        if (w.k === 'done' && !leaving?.ids.includes(id)) return null;
-        const p = w.k === 'done' ? { ...L.gone, y: L.seat(0).y } : ptOf(L, w);
-        const onBoard = w.k === 'board';
-        const locked = onBoard && isLocked(s, id);
-        const cls = 'item' + (onBoard && can.has(w.cell) ? ' can' : '') + (onBoard && !can.has(w.cell) ? ' blocked' : '')
-          + (shown.frame?.step.k === 'walk' && shown.frame.step.id === id ? ' walking' : '') + (w.k === 'done' ? ' done' : '');
+        let p: Pt;
+        if (w.k === 'done') {
+          if (!leaving?.ids.includes(id)) return null;
+          p = L.gone(leaving.seat);
+        } else p = ptOf(L, w);
+        const inCol = w.k === 'col';
+        const isTop = inCol && w.p === 0;
+        const locked = inCol && isLocked(s, id);
+        const cls = 'item' + (isTop && can.has(id) ? ' can' : '') + (inCol && !can.has(id) ? ' blocked' : '')
+          + (inCol && !isTop ? ' under' : '') + (inCol && w.p >= stage.rows ? ' unseen' : '')
+          + (shown.frame?.step.k === 'take' && shown.frame.step.id === id ? ' walking' : '') + (w.k === 'done' ? ' done' : '');
         return (
           <div key={id} class={cls} ref={(el) => { if (el) els.set(id, el); else els.delete(id); }}
-            data-id={id} data-cell={onBoard ? w.cell : undefined} data-kind={it.c}
+            data-id={id} data-col={inCol && w.p < stage.rows ? w.col : undefined} data-top={isTop ? '' : undefined} data-kind={inCol && w.p >= stage.rows ? undefined : it.c}
             aria-label={`${theme.kinds[it.c].name}のお皿`}
             style={{ width: `${sz}px`, height: `${sz}px`, transform: tf(p), opacity: p.opacity ?? 1 }}
-            onPointerDown={(e) => { e.preventDefault(); if (onBoard) onTap(id); }}>
+            onPointerDown={(e) => { e.preventDefault(); if (inCol) onTap(id); }}>
             <div class="inner">
               <A.Plate theme={theme} kind={it.c} />
-              {locked && <span class="lock" style={{ fontSize: `${Math.max(9, Math.round(sz * 0.24))}px` }}>札{it.lock - s.order}</span>}
+              {locked && <span class="lock" style={{ fontSize: `${Math.max(9, Math.round(sz * 0.24))}px` }}>札{it.lock - s.served}</span>}
             </div>
           </div>
         );

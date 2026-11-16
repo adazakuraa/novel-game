@@ -1,6 +1,8 @@
 // 解法探索と品質指標。ステージ生成（tools）と全ステージ検証（tests）で使う。
 import { rng, type Rng } from '../../core/mode';
-import { apply, init, legalMoves, status, stateKey, type QState, type QueueStage } from './rules';
+import { RobustSolver } from './robust';
+import { SolverBudgetError } from './budget';
+import { apply, init, legalMoves, seatFor, status, topOf, stateKey, type QState, type QueueStage } from './rules';
 
 export class Solver {
   /** 局面キー → クリア可能か（探索し切った局面だけを記録） */
@@ -25,7 +27,7 @@ export class Solver {
   }
 
   private dfs(s: QState, path: number[], order?: (s: QState, moves: number[]) => number[]): boolean {
-    if (s.order >= s.stage.orders.length) return true;
+    if (s.served >= s.stage.orders.length) return true;
     const k = stateKey(s);
     const m = this.memo.get(k);
     if (m === false) return false;
@@ -44,16 +46,18 @@ export class Solver {
   }
 }
 
-export class SolverBudgetError extends Error {
-  constructor() { super('solver budget exceeded'); }
-}
+export { SolverBudgetError };
 
 /** 注文に合う皿を先に、置き台へ置くなら早く出番が来る色を先に */
 function defaultOrder(s: QState, moves: number[]): number[] {
   const d = s.stage.orders;
-  const soon = (c: number) => { const i = d.findIndex((o, j) => j >= s.order && o.c === c); return i < 0 ? 999 : i - s.order; };
+  const soon = (c: number) => {
+    if (seatFor(s, c) >= 0) return 0;
+    const i = d.findIndex((o, j) => j >= s.next && o.c === c);
+    return i < 0 ? 999 : 1 + i - s.next;
+  };
   return moves
-    .map((m) => ({ m, v: soon(s.items[s.board[m]].c) }))
+    .map((m) => ({ m, v: soon(s.items[topOf(s, m)].c) }))
     .sort((a, b) => a.v - b.v)
     .map((x) => x.m);
 }
@@ -80,8 +84,7 @@ export const randomPolicy: Policy = (_s, moves, r) => r.pick(moves);
 
 /** 素直な打ち手：注文に合う皿があればその中から、なければ無作為に置き台へ */
 export const greedyPolicy: Policy = (s, moves, r) => {
-  const want = s.stage.orders[s.order].c;
-  const match = moves.filter((m) => s.items[s.board[m]].c === want);
+  const match = moves.filter((m) => seatFor(s, s.items[topOf(s, m)].c) >= 0);
   return r.pick(match.length ? match : moves);
 };
 
@@ -96,12 +99,15 @@ export function playout(stage: QueueStage, policy: Policy, r: Rng): { win: boole
 }
 
 export interface Metrics {
+  /** 見えている情報だけで解けるか（見えない皿がどんな並びでも、正しく考えれば必ずクリアできる） */
   solvable: boolean;
   solution: number[];
-  customers: number;   // 皿の総数
+  plates: number;      // 皿の総数
+  /** 正解の手の割合：見えている情報だけで勝てる局面で、打てる手のうち勝ち筋に残る手の割合（手が1つしかない局面は除く）の平均。低いほど難しい */
+  goodRatio: number;
   /** 本質的に異なる解法の数（どの皿を置き台に通したかの組が違う解法） */
   distinct: number;
-  /** 最初の一手のうち、クリア可能なまま進める手の数 / 全部の手 */
+  /** 最初の一手のうち、見えている情報だけで勝ち筋に残れる手の数 / 全部の手 */
   firstWin: number;
   firstAll: number;
   randomWin: number;
@@ -118,38 +124,47 @@ export interface MeasureOptions {
   runs?: number;
   samples?: number;
   budget?: number;
-  /** 素直な打ち手の勝率を見た時点で打ち切るか（生成の高速化用）。false を返すと null */
-  gate?: (greedyWin: number) => boolean;
+  /** 正解の手の割合を見た時点で打ち切るか（生成の高速化用）。false を返すと null */
+  gate?: (goodRatio: number) => boolean;
 }
 
-export function measure(stage: QueueStage, opt: MeasureOptions & { gate: (g: number) => boolean }): Metrics | null;
+export function measure(stage: QueueStage, opt: MeasureOptions & { gate: (good: number) => boolean }): Metrics | null;
 export function measure(stage: QueueStage, opt?: MeasureOptions): Metrics;
 export function measure(stage: QueueStage, opt: MeasureOptions = {}): Metrics | null {
   const r = rng(opt.seed ?? 1);
   const runs = opt.runs ?? 200;
   const s0 = init(stage);
 
-  // 安い指標から：素直な打ち手の勝率
-  const losses: QState[][] = [];
-  let gw = 0;
+  // 見えている情報だけで勝てるか（見えない皿がどんな並びでも）
+  const robust = new RobustSolver(opt.budget);
+  const solver = new Solver(opt.budget);
+  const solution = robust.wins(s0) ? solver.solve(s0) : null;
+  const base = { plates: s0.items.length };
+  if (!solution) {
+    return { ...base, solvable: false, solution: [], distinct: 0, firstWin: 0, firstAll: 0, randomWin: 0, greedyWin: 0, trapDepth: 0, minSlack: 0, goodRatio: 0, nodes: solver.nodes };
+  }
+
+  // 正解の手の割合：見えている情報だけで勝てる手の中を無作為に歩き、各局面で「その手 / 打てる手」を集める
+  let sum = 0, cnt = 0;
+  for (let i = 0; i < 20; i++) {
+    let s = s0;
+    while (status(s) === 'playing') {
+      const moves = legalMoves(s);
+      const good = moves.filter((m) => robust.moveWins(s, m));
+      if (moves.length > 1) { sum += good.length / moves.length; cnt++; }
+      s = apply(s, r.pick(good))!;
+    }
+  }
+  const goodRatio = cnt ? sum / cnt : 1;
+  if (opt.gate && !opt.gate(goodRatio)) return null;
+
+  // 素直な打ち手の勝率と、罠の深さ（素直な打ち手が詰みに入った局面から、負けるまでの最長手数）
+  let gw = 0, trap = 0;
+  const memo = new Map<string, number>();
   for (let i = 0; i < runs; i++) {
     const g = playout(stage, greedyPolicy, r);
-    if (g.win) gw++; else losses.push(g.trail);
-  }
-  const greedyWin = gw / runs;
-  if (opt.gate && !opt.gate(greedyWin)) return null;
-
-  const solver = new Solver(opt.budget);
-  const solution = solver.solve(s0);
-  const base = { customers: s0.items.length, greedyWin };
-  if (!solution) {
-    return { ...base, solvable: false, solution: [], distinct: 0, firstWin: 0, firstAll: 0, randomWin: 0, trapDepth: 0, minSlack: 0, nodes: solver.nodes };
-  }
-
-  // 罠の深さ：素直な打ち手が詰みに入った局面から、負けるまでの最長手数
-  let trap = 0;
-  const memo = new Map<string, number>();
-  for (const t of losses) {
+    if (g.win) { gw++; continue; }
+    const t = g.trail;
     let j = t.length - 1;
     while (j > 0 && !solver.solvable(t[j - 1])) j--;
     trap = Math.max(trap, longestSurvival(t[j], memo, solver));
@@ -160,7 +175,7 @@ export function measure(stage: QueueStage, opt: MeasureOptions = {}): Metrics | 
   const sigOf = (moves: number[]) => {
     let s = s0; const used: number[] = [];
     for (const m of moves) {
-      const id = s.board[m];
+      const id = topOf(s, m);
       const n = apply(s, m)!;
       if (n.bench.includes(id)) used.push(id);
       s = n;
@@ -175,7 +190,7 @@ export function measure(stage: QueueStage, opt: MeasureOptions = {}): Metrics | 
   }
 
   const first = legalMoves(s0);
-  const firstWin = first.filter((m) => solver.solvable(apply(s0, m)!)).length;
+  const firstWin = first.filter((m) => robust.moveWins(s0, m)).length;
 
   let rw = 0;
   for (let i = 0; i < runs; i++) if (playout(stage, randomPolicy, r).win) rw++;
@@ -195,9 +210,11 @@ export function measure(stage: QueueStage, opt: MeasureOptions = {}): Metrics | 
     firstWin,
     firstAll: first.length,
     randomWin: rw / runs,
+    greedyWin: gw / runs,
     trapDepth: trap,
     minSlack: minSlack === Infinity ? stage.bench : minSlack,
-    nodes: solver.nodes,
+    goodRatio,
+    nodes: solver.nodes + robust.nodes,
   };
 }
 

@@ -3,7 +3,8 @@
 
 export interface Kind {
   name: string;     // 例：マグロ
-  mark: string;     // 色に頼らず区別するための1文字
+  mark: string;     // 読み上げ・説明用の1文字
+  shape: string;    // お寿司の形（色に頼らず区別するため）
   color: string;    // 基本色
   light: string;    // ハイライト
   dark: string;     // 影
@@ -27,14 +28,15 @@ export const sushi: Theme = {
   id: 'sushi',
   title: 'おまちどう',
   kinds: [
-    { name: 'マグロ', mark: '鮪', color: '#d8374a', light: '#f36b7a', dark: '#8f1e2c' },
-    { name: '玉子', mark: '玉', color: '#f2be2c', light: '#ffe07a', dark: '#a87d0c' },
-    { name: 'かっぱ巻き', mark: '胡', color: '#3f9e4f', light: '#79d184', dark: '#21612b' },
-    { name: 'サーモン', mark: '鮭', color: '#f0843a', light: '#ffb37a', dark: '#a6501a' },
-    { name: 'イカ', mark: '烏', color: '#e9edf1', light: '#ffffff', dark: '#9aa4ae' },
-    { name: 'サバ', mark: '鯖', color: '#3d6fb8', light: '#7ea6e6', dark: '#1f3f73' },
-    { name: 'エビ', mark: '海', color: '#ef8fb5', light: '#ffc2da', dark: '#a8466f' },
-    { name: 'ウニ', mark: '雲', color: '#8b5bb7', light: '#b994de', dark: '#53307a' },
+    // 皿の色は回転寿司の色皿のように、はっきり違う6色を先に使う
+    { name: 'マグロ', mark: '鮪', shape: 'nigiri', color: '#d6283a', light: '#f45a69', dark: '#8a1020' },
+    { name: '玉子', mark: '玉', shape: 'tamago', color: '#f2b705', light: '#ffd84d', dark: '#9a7300' },
+    { name: 'かっぱ巻き', mark: '胡', shape: 'maki', color: '#23a046', light: '#5fd27c', dark: '#0f6128' },
+    { name: 'いくら', mark: '鮭', shape: 'gunkan', color: '#2a6fdb', light: '#6aa0ff', dark: '#143f86' },
+    { name: 'エビ', mark: '海', shape: 'ebi', color: '#8e44c9', light: '#b77ae8', dark: '#55207e' },
+    { name: 'イカ', mark: '烏', shape: 'ika', color: '#2b2b33', light: '#5d5d6a', dark: '#0d0d12' },
+    { name: 'サーモン', mark: '鱒', shape: 'salmon', color: '#ff7f2a', light: '#ffab6b', dark: '#a84a0c' },
+    { name: 'ウニ', mark: '雲', shape: 'uni', color: '#e75aa0', light: '#ff92c6', dark: '#8e2960' },
   ],
   words: {
     next: 'このあとのお客さん',
