@@ -24,8 +24,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
-      - run: npm run build
+      - run: npm test            # RPG のテスト＋パズルの単体テスト・全ステージ検証・自動プレイ
+      - run: npm run build       # RPG を dist/、パズルを dist/puzzle/ に出力
+      - run: npx playwright install --with-deps chromium
+      - run: npm run puzzle:e2e  # パズルの UI テスト（全ステージを画面操作でクリア）
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
